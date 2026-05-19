@@ -9,8 +9,12 @@
   "screen.voxymap.unsupported.end": "VoxyMap does not support the End.",
   "screen.voxymap.unsupported.close": "Press M or Esc to close the map.",
   "message.voxymap.voxy_missing": "Voxy is not installed. VoxyMap needs Voxy for the full 3D map view.",
+  "message.voxymap.xaero_open_failed": "Xaero World Map is installed, but VoxyMap could not open it yet. Join a world and try again.",
   "overlay.voxymap.player": "Player",
   "overlay.voxymap.camera": "Camera",
   "overlay.voxymap.zoom": "zoom",
+  "overlay.voxymap.xaero": "Xaero 2D Map",
+  "overlay.voxymap.xaero.transition": "Opening Xaero World Map...",
+  "overlay.voxymap.return_3d": "VoxyMap 3D",
   "overlay.voxymap.keys": "WASD move  Shift fast  RMB look  Wheel zoom  C center  M close"
 }

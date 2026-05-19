@@ -9,8 +9,12 @@
   "screen.voxymap.unsupported.end": "VoxyMap nie obs\u0142uguje Endu.",
   "screen.voxymap.unsupported.close": "Naci\u015bnij M albo Esc, aby zamkn\u0105\u0107 map\u0119.",
   "message.voxymap.voxy_missing": "Nie wykryto Voxy. VoxyMap potrzebuje Voxy do pe\u0142nego widoku mapy 3D.",
+  "message.voxymap.xaero_open_failed": "Xaero World Map jest zainstalowany, ale VoxyMap nie mo\u017ce go jeszcze otworzy\u0107. Wejd\u017a do \u015bwiata i spr\u00f3buj ponownie.",
   "overlay.voxymap.player": "Gracz",
   "overlay.voxymap.camera": "Kamera",
   "overlay.voxymap.zoom": "zoom",
+  "overlay.voxymap.xaero": "Mapa 2D Xaero",
+  "overlay.voxymap.xaero.transition": "Otwieranie Xaero World Map...",
+  "overlay.voxymap.return_3d": "VoxyMap 3D",
   "overlay.voxymap.keys": "WASD ruch  Shift szybko  PPM obr\u00f3t  Scroll zoom  C centrum  M zamknij"
 }

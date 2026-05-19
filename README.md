@@ -11,7 +11,7 @@ https://modrinth.com/mod/3d-maps-voxy-addon
 - Full-screen 3D map opened with the `M` key.
 - Voxy-powered terrain data for long-range world previews.
 - Smooth camera movement, zoom, rotation, and centering on the player.
-- Polish and English translations.
+- Full support for English, Polish, and Russian languages.
 - Client command for debug logs: `/3dmaps debug on/off`.
 
 ## Requirements

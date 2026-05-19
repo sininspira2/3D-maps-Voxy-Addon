@@ -1,0 +1,20 @@
+{
+  "key.voxymap.open_map": "Открыть Voxy Map",
+  "key.category.voxymap.main": "VoxyMap3D",
+  "key.category.minecraft.voxymap": "VoxyMap3D",
+  "category.voxymap": "VoxyMap3D",
+  "screen.voxymap.title": "Карта мира (VoxyMap)",
+  "screen.voxymap.unsupported.title": "Неподдерживаемое измерение",
+  "screen.voxymap.unsupported.nether": "VoxyMap отключен в Незере.",
+  "screen.voxymap.unsupported.end": "VoxyMap не поддерживает Энд.",
+  "screen.voxymap.unsupported.close": "Нажмите M или Esc, чтобы закрыть карту.",
+  "message.voxymap.voxy_missing": "Voxy не установлен. VoxyMap нужен Voxy для просмотра полной 3D-карты.",
+  "message.voxymap.xaero_open_failed": "Xaero World Map установлен, но VoxyMap пока не смог открыть его. Войдите в мир и попробуйте снова.",
+  "overlay.voxymap.player": "Игрок",
+  "overlay.voxymap.camera": "Камера",
+  "overlay.voxymap.zoom": "зум",
+  "overlay.voxymap.xaero": "2D-карта Xaero",
+  "overlay.voxymap.xaero.transition": "Открытие Xaero World Map...",
+  "overlay.voxymap.return_3d": "VoxyMap 3D",
+  "overlay.voxymap.keys": "ЦФЫВ движение  Shift ускориться  ПКМ смотреть  Колесо зум  C центр  M закрыть"
+}

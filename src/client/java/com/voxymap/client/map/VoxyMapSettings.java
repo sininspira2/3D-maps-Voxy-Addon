@@ -16,7 +16,6 @@ public final class VoxyMapSettings {
 
     private static boolean loaded = false;
     private static boolean pauseSingleplayer = true;
-    private static boolean disableShadersDuringMap = false;
     private static double cameraSpeedMultiplier = 1.0;
     private static TimePreset timePreset = TimePreset.DAY;
 
@@ -36,7 +35,6 @@ public final class VoxyMapSettings {
         }
 
         pauseSingleplayer = Boolean.parseBoolean(properties.getProperty("pauseSingleplayer", Boolean.toString(pauseSingleplayer)));
-        disableShadersDuringMap = Boolean.parseBoolean(properties.getProperty("disableShadersDuringMap", Boolean.toString(disableShadersDuringMap)));
         cameraSpeedMultiplier = clamp(readDouble(properties.getProperty("cameraSpeedMultiplier"), cameraSpeedMultiplier), 0.25, 4.0);
         timePreset = TimePreset.fromId(properties.getProperty("timePreset"), timePreset);
     }
@@ -44,7 +42,6 @@ public final class VoxyMapSettings {
     public static void save() {
         Properties properties = new Properties();
         properties.setProperty("pauseSingleplayer", Boolean.toString(pauseSingleplayer));
-        properties.setProperty("disableShadersDuringMap", Boolean.toString(disableShadersDuringMap));
         properties.setProperty("cameraSpeedMultiplier", String.format(Locale.ROOT, "%.2f", cameraSpeedMultiplier));
         properties.setProperty("timePreset", timePreset.id);
 
@@ -65,17 +62,6 @@ public final class VoxyMapSettings {
     public static void togglePauseSingleplayer() {
         load();
         pauseSingleplayer = !pauseSingleplayer;
-        save();
-    }
-
-    public static boolean disableShadersDuringMap() {
-        load();
-        return disableShadersDuringMap;
-    }
-
-    public static void toggleDisableShadersDuringMap() {
-        load();
-        disableShadersDuringMap = !disableShadersDuringMap;
         save();
     }
 

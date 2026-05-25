@@ -6,8 +6,11 @@
     "CameraMixin",
     "FogRendererMixin",
     "GameRendererMixin",
+    "GuiMixin",
     "LevelMixin",
     "LevelRendererMixin",
+    "RenderPipelineFactoryMixin",
+    "VoxyRenderSystemMixin",
     "XaeroGuiMapMixin"
   ],
   "injectors": {

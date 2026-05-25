@@ -5,8 +5,8 @@ import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
 import com.voxymap.client.map.VoxyBridge;
 import com.voxymap.client.map.VoxyMapCameraController;
+import com.voxymap.client.map.VoxyMapGuiRenderer;
 import com.voxymap.client.map.VoxyMapSettings;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
@@ -21,25 +21,28 @@ public class MapScreen extends Screen {
 
     private static final long OPEN_ANIMATION_NANOS = 850_000_000L;
     private static final long XAERO_TRANSITION_NANOS = 380_000_000L;
+    private static final double MAP_VIEW_LEVEL = 320.0;
     private static final double MAX_KEYBOARD_CAMERA_SPEED = 640.0;
-    private static final double MAX_DRAG_STEP_BLOCKS = 192.0;
+    private static final double MAX_DRAG_STEP_BLOCKS = 1536.0;
     private static boolean warnedUntestedVoxyVersion = false;
 
     private double viewCenterX;
+    private double viewCenterY;
     private double viewCenterZ;
     private double blocksPerPixel = 4.0;
     private double viewYaw = Math.toRadians(45.0);
     private double viewPitch = 0.68;
 
     private boolean dragging = false;
-    private boolean rotating = false;
-    private double dragStartMouseX, dragStartMouseY;
-    private double dragStartViewX, dragStartViewZ;
-    private double dragStartYaw, dragStartPitch;
+    private boolean middleDragging = false;
+    private double dragStartMouseX;
+    private double dragStartYaw;
+    private double dragLastMouseX;
+    private double dragLastMouseY;
+    private double lastMouseX = Double.NaN;
+    private double lastMouseY = Double.NaN;
     private double moveVelocityX = 0.0;
     private double moveVelocityZ = 0.0;
-    private double yawVelocity = 0.0;
-    private double pitchVelocity = 0.0;
     private long lastFrameNanos = 0L;
     private long openedAtNanos = 0L;
     private boolean xaeroTransitionActive = false;
@@ -62,14 +65,12 @@ public class MapScreen extends Screen {
     private int speedPlusX = -1;
     private int speedPlusY = -1;
     private int pauseRowY = -1;
-    private int shaderRowY = -1;
     private int speedRowY = -1;
     private int timeRowY = -1;
     private static final int SETTINGS_ROW_HEIGHT = 24;
     private static final int SPEED_BUTTON_SIZE = 18;
 
-    private static final int BG          = 0xFF080810;
-    private static final int PANEL_BG    = 0xCC000016;
+    private static final int BG = 0xFF080810;
 
     public MapScreen() {
         super(TITLE);
@@ -80,6 +81,7 @@ public class MapScreen extends Screen {
         super.init();
         openedAtNanos = System.nanoTime();
         lastFrameNanos = 0L;
+        viewCenterY = MAP_VIEW_LEVEL;
         if (minecraft.player != null) {
             viewCenterX = minecraft.player.getX();
             viewCenterZ = minecraft.player.getZ();
@@ -88,6 +90,7 @@ public class MapScreen extends Screen {
             VoxyBridge.suppressEnvironmentalFogForMap();
             MapRenderSettingsGuard.applyForMap(minecraft);
             syncWorldCamera();
+            VoxyMapGuiRenderer.open(minecraft);
         } else {
             VoxyMapCameraController.deactivate();
         }
@@ -100,7 +103,10 @@ public class MapScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
         if (isUnsupportedDimension()) {
+            VoxyMapGuiRenderer.close(minecraft);
             VoxyMapCameraController.deactivate();
             drawUnsupportedDimension(g);
             drawOpeningAnimation(g);
@@ -112,6 +118,7 @@ public class MapScreen extends Screen {
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
         syncWorldCamera();
+        VoxyMapGuiRenderer.render(minecraft);
         drawWorldViewerOverlay(g, mouseX, mouseY);
         drawOpeningAnimation(g);
         if (xaeroTransitionActive) {
@@ -139,14 +146,16 @@ public class MapScreen extends Screen {
         lastFrameNanos = now;
 
         long window = minecraft.getWindow().handle();
-        double forwardInput = keyDown(window, GLFW.GLFW_KEY_W) ? 1.0 : 0.0;
-        forwardInput -= keyDown(window, GLFW.GLFW_KEY_S) ? 1.0 : 0.0;
-        double strafeInput = keyDown(window, GLFW.GLFW_KEY_A) ? 1.0 : 0.0;
-        strafeInput -= keyDown(window, GLFW.GLFW_KEY_D) ? 1.0 : 0.0;
-        double turnInput = keyDown(window, GLFW.GLFW_KEY_E) ? 1.0 : 0.0;
-        turnInput -= keyDown(window, GLFW.GLFW_KEY_Q) ? 1.0 : 0.0;
-        double pitchInput = keyDown(window, GLFW.GLFW_KEY_PAGE_DOWN) ? 1.0 : 0.0;
-        pitchInput -= keyDown(window, GLFW.GLFW_KEY_PAGE_UP) ? 1.0 : 0.0;
+        double forwardInput = keyDown(window, GLFW.GLFW_KEY_W) || keyDown(window, GLFW.GLFW_KEY_UP) ? 1.0 : 0.0;
+        forwardInput -= keyDown(window, GLFW.GLFW_KEY_S) || keyDown(window, GLFW.GLFW_KEY_DOWN) ? 1.0 : 0.0;
+        double strafeInput = keyDown(window, GLFW.GLFW_KEY_A) || keyDown(window, GLFW.GLFW_KEY_LEFT) ? 1.0 : 0.0;
+        strafeInput -= keyDown(window, GLFW.GLFW_KEY_D) || keyDown(window, GLFW.GLFW_KEY_RIGHT) ? 1.0 : 0.0;
+
+        double horizontalInput = Math.hypot(forwardInput, strafeInput);
+        if (horizontalInput > 1.0) {
+            forwardInput /= horizontalInput;
+            strafeInput /= horizontalInput;
+        }
 
         double speedBoost = keyDown(window, GLFW.GLFW_KEY_LEFT_SHIFT) || keyDown(window, GLFW.GLFW_KEY_RIGHT_SHIFT) ? 2.5 : 1.0;
         double moveSpeed = Math.max(12.0, blocksPerPixel * 76.0) * speedBoost * VoxyMapSettings.cameraSpeedMultiplier();
@@ -155,22 +164,16 @@ public class MapScreen extends Screen {
         double forwardZ = Math.cos(viewYaw);
         double rightX = Math.cos(viewYaw);
         double rightZ = Math.sin(viewYaw);
-        double targetVX = (forwardX * forwardInput + rightX * strafeInput) * moveSpeed;
-        double targetVZ = (forwardZ * forwardInput + rightZ * strafeInput) * moveSpeed;
+        double targetVX = dragging ? 0.0 : (forwardX * forwardInput + rightX * strafeInput) * moveSpeed;
+        double targetVZ = dragging ? 0.0 : (forwardZ * forwardInput + rightZ * strafeInput) * moveSpeed;
 
         double response = 1.0 - Math.exp(-dt * 10.0);
         moveVelocityX = Mth.lerp(response, moveVelocityX, targetVX);
         moveVelocityZ = Mth.lerp(response, moveVelocityZ, targetVZ);
-        yawVelocity = Mth.lerp(response, yawVelocity, turnInput * 1.65);
-        pitchVelocity = Mth.lerp(response, pitchVelocity, pitchInput * 0.72);
 
         if (!dragging) {
             viewCenterX += moveVelocityX * dt;
             viewCenterZ += moveVelocityZ * dt;
-        }
-        if (!rotating) {
-            viewYaw += yawVelocity * dt;
-            viewPitch = Mth.clamp(viewPitch + pitchVelocity * dt, 0.2, 1.1);
         }
     }
 
@@ -178,19 +181,72 @@ public class MapScreen extends Screen {
         return GLFW.glfwGetKey(window, key) == GLFW.GLFW_PRESS;
     }
 
-    private void moveCenterToward(double targetX, double targetZ, double maxStep) {
-        double dx = targetX - viewCenterX;
-        double dz = targetZ - viewCenterZ;
-        double distance = Math.hypot(dx, dz);
-        if (distance <= maxStep || distance == 0.0) {
-            viewCenterX = targetX;
-            viewCenterZ = targetZ;
-            return;
+    private GroundPoint mapPointAt(double mouseX, double mouseY) {
+        if (width <= 0 || height <= 0 || !VoxyMapCameraController.isActive()) {
+            return null;
         }
 
-        double scale = maxStep / distance;
-        viewCenterX += dx * scale;
-        viewCenterZ += dz * scale;
+        double cameraX = VoxyMapCameraController.cameraX();
+        double cameraY = VoxyMapCameraController.cameraY();
+        double cameraZ = VoxyMapCameraController.cameraZ();
+        double pitch = Math.toRadians(VoxyMapCameraController.cameraPitch());
+        double planeY = viewCenterY;
+
+        double forwardX = -Math.sin(viewYaw) * Math.cos(pitch);
+        double forwardY = -Math.sin(pitch);
+        double forwardZ = Math.cos(viewYaw) * Math.cos(pitch);
+        double rightX = Math.cos(viewYaw);
+        double rightZ = Math.sin(viewYaw);
+        double upX = Math.sin(viewYaw) * Math.sin(pitch);
+        double upY = Math.cos(pitch);
+        double upZ = -Math.cos(viewYaw) * Math.sin(pitch);
+
+        double tanY = Math.tan(Math.toRadians(VoxyMapCameraController.fov()) * 0.5);
+        double tanX = tanY * width / (double) height;
+        double ndcX = 1.0 - mouseX / width * 2.0;
+        double ndcY = 1.0 - mouseY / height * 2.0;
+        double rayX = forwardX + rightX * ndcX * tanX + upX * ndcY * tanY;
+        double rayY = forwardY + upY * ndcY * tanY;
+        double rayZ = forwardZ + rightZ * ndcX * tanX + upZ * ndcY * tanY;
+
+        if (Math.abs(rayY) < 1.0E-6) {
+            return null;
+        }
+
+        double t = (planeY - cameraY) / rayY;
+        if (t <= 0.0 || !Double.isFinite(t)) {
+            return null;
+        }
+        return new GroundPoint(cameraX + rayX * t, cameraZ + rayZ * t);
+    }
+
+    private void keepMapPointUnderMouse(GroundPoint anchor, double mouseX, double mouseY) {
+        GroundPoint current = mapPointAt(mouseX, mouseY);
+        if (anchor == null || current == null) {
+            return;
+        }
+        viewCenterX += anchor.x - current.x;
+        viewCenterZ += anchor.z - current.z;
+    }
+
+    private void panByPixels(double deltaX, double deltaY) {
+        double rightX = Math.cos(viewYaw);
+        double rightZ = Math.sin(viewYaw);
+        double forwardX = -Math.sin(viewYaw);
+        double forwardZ = Math.cos(viewYaw);
+        double pitch = Math.toRadians(VoxyMapCameraController.cameraPitch());
+        double forwardScale = 1.0 / Math.max(0.35, Math.sin(pitch));
+        double sideDistance = deltaX * blocksPerPixel;
+        double forwardDistance = deltaY * blocksPerPixel * forwardScale;
+        double distance = Math.hypot(sideDistance, forwardDistance);
+        if (distance > MAX_DRAG_STEP_BLOCKS) {
+            double scale = MAX_DRAG_STEP_BLOCKS / distance;
+            sideDistance *= scale;
+            forwardDistance *= scale;
+        }
+
+        viewCenterX += rightX * sideDistance + forwardX * forwardDistance;
+        viewCenterZ += rightZ * sideDistance + forwardZ * forwardDistance;
     }
 
     @Override
@@ -206,7 +262,7 @@ public class MapScreen extends Screen {
 
     private void syncWorldCamera() {
         if (!isUnsupportedDimension()) {
-            VoxyMapCameraController.update(minecraft, viewCenterX, viewCenterZ, viewYaw, viewPitch, blocksPerPixel);
+            VoxyMapCameraController.update(minecraft, viewCenterX, viewCenterY, viewCenterZ, viewYaw, viewPitch, blocksPerPixel);
         } else {
             VoxyMapCameraController.deactivate();
         }
@@ -278,18 +334,11 @@ public class MapScreen extends Screen {
             int pz = (int) minecraft.player.getZ();
             g.drawString(minecraft.font, Component.translatable("overlay.voxymap.player").getString() + "  " + px + " / " + py + " / " + pz, topX + 10, topY + 21, 0xFFDFF8FF);
         }
-        g.drawString(minecraft.font, Component.translatable("overlay.voxymap.camera").getString() + "  " + (int) viewCenterX + " / " + (int) viewCenterZ
+        g.drawString(minecraft.font, Component.translatable("overlay.voxymap.camera").getString() + "  " + (int) viewCenterX + " / " + (int) viewCenterY + " / " + (int) viewCenterZ
                         + "   " + Component.translatable("overlay.voxymap.zoom").getString() + " " + String.format("%.2f", blocksPerPixel),
                 topX + 10, topY + 36, 0xFF9FD8FF);
 
         drawKeyHints(g, 12, height - 34 + slide);
-
-        int cx = width / 2;
-        int cy = height / 2;
-        g.fill(cx - 6, cy, cx - 2, cy + 1, 0xCCFFFFFF);
-        g.fill(cx + 3, cy, cx + 7, cy + 1, 0xCCFFFFFF);
-        g.fill(cx, cy - 6, cx + 1, cy - 2, 0xCCFFFFFF);
-        g.fill(cx, cy + 3, cx + 1, cy + 7, 0xCCFFFFFF);
 
         drawXaeroButton(g, mouseX, mouseY, slide);
         drawSettingsButton(g, mouseX, mouseY, slide);
@@ -325,7 +374,7 @@ public class MapScreen extends Screen {
 
     private void drawSettingsPanel(GuiGraphics g, int mouseX, int mouseY, int slide) {
         settingsPanelW = Math.min(360, width - 24);
-        settingsPanelH = 142;
+        settingsPanelH = 118;
         settingsPanelX = width - settingsPanelW - 12;
         settingsPanelY = Math.max(12, height - settingsPanelH - 68 + slide);
         drawGlassPanel(g, settingsPanelX, settingsPanelY, settingsPanelW, settingsPanelH, 0xDD030914, 0xFF3BA4FF);
@@ -333,30 +382,27 @@ public class MapScreen extends Screen {
         int x = settingsPanelX + 12;
         int y = settingsPanelY + 10;
         pauseRowY = y + 20;
-        shaderRowY = y + 44;
-        speedRowY = y + 68;
-        timeRowY = y + 92;
+        speedRowY = y + 44;
+        timeRowY = y + 68;
         g.drawString(minecraft.font, Component.translatable("screen.voxymap.settings.title"), x, y, 0xFFFFFFFF);
         drawSettingValue(g, x, pauseRowY, "screen.voxymap.settings.pause", onOff(VoxyMapSettings.pauseSingleplayer()), 0);
-        drawSettingValue(g, x, shaderRowY, "screen.voxymap.settings.shaders", onOff(VoxyMapSettings.disableShadersDuringMap()), 1);
-        drawSettingValue(g, x, speedRowY, "screen.voxymap.settings.speed", String.format("%.2fx", VoxyMapSettings.cameraSpeedMultiplier()), 2);
-        drawSettingValue(g, x, timeRowY, "screen.voxymap.settings.time", VoxyMapSettings.timePreset().label().getString(), 3);
+        drawSettingValue(g, x, speedRowY, "screen.voxymap.settings.speed", String.format("%.2fx", VoxyMapSettings.cameraSpeedMultiplier()), 1);
+        drawSettingValue(g, x, timeRowY, "screen.voxymap.settings.time", VoxyMapSettings.timePreset().label().getString(), 2);
     }
 
     private void drawSettingValue(GuiGraphics g, int x, int y, String labelKey, String value, int row) {
         int rowX = settingsPanelX + 8;
         int rowW = settingsPanelW - 16;
-        int rowBg = row == 1 && VoxyMapSettings.disableShadersDuringMap() ? 0xB02D1B14 : 0x66102034;
-        g.fill(rowX, y, rowX + rowW, y + SETTINGS_ROW_HEIGHT - 2, rowBg);
-        g.fill(rowX, y, rowX + 2, y + SETTINGS_ROW_HEIGHT - 2, row == 1 ? 0xFFFFB14A : 0xFF3BA4FF);
+        g.fill(rowX, y, rowX + rowW, y + SETTINGS_ROW_HEIGHT - 2, 0x66102034);
+        g.fill(rowX, y, rowX + 2, y + SETTINGS_ROW_HEIGHT - 2, 0xFF3BA4FF);
         g.drawString(minecraft.font, Component.translatable(labelKey), x, y + 7, 0xFFDFF8FF);
         int valueW = Math.max(62, minecraft.font.width(value) + 14);
         int valueX = settingsPanelX + settingsPanelW - valueW - 14;
-        if (row == 2) {
+        if (row == 1) {
             valueX -= (SPEED_BUTTON_SIZE + 6);
         }
         drawValueBox(g, valueX, y + 3, valueW, 16, value);
-        if (row == 2) {
+        if (row == 1) {
             speedMinusX = valueX - SPEED_BUTTON_SIZE - 6;
             speedMinusY = y + 2;
             speedPlusX = valueX + valueW + 6;
@@ -380,9 +426,10 @@ public class MapScreen extends Screen {
 
     private void drawKeyHints(GuiGraphics g, int x, int y) {
         String[][] hints = {
+                {Component.translatable("overlay.voxymap.key.drag.button").getString(), Component.translatable("overlay.voxymap.key.drag").getString()},
+                {Component.translatable("overlay.voxymap.key.rotate.button").getString(), Component.translatable("overlay.voxymap.key.rotate").getString()},
                 {Component.translatable("overlay.voxymap.key.move.button").getString(), Component.translatable("overlay.voxymap.key.move").getString()},
                 {Component.translatable("overlay.voxymap.key.fast.button").getString(), Component.translatable("overlay.voxymap.key.fast").getString()},
-                {Component.translatable("overlay.voxymap.key.rotate.button").getString(), Component.translatable("overlay.voxymap.key.rotate").getString()},
                 {Component.translatable("overlay.voxymap.key.zoom.button").getString(), Component.translatable("overlay.voxymap.key.zoom").getString()},
                 {Component.translatable("overlay.voxymap.key.center.button").getString(), Component.translatable("overlay.voxymap.key.center").getString()},
                 {Component.translatable("overlay.voxymap.key.close.button").getString(), Component.translatable("overlay.voxymap.key.close").getString()}
@@ -477,9 +524,6 @@ public class MapScreen extends Screen {
 
         if (isInsideSettingsRow(mouseX, mouseY, pauseRowY)) {
             VoxyMapSettings.togglePauseSingleplayer();
-        } else if (isInsideSettingsRow(mouseX, mouseY, shaderRowY)) {
-            VoxyMapSettings.toggleDisableShadersDuringMap();
-            MapRenderSettingsGuard.applyForMap(minecraft);
         } else if (isInsideSettingsRow(mouseX, mouseY, speedRowY)) {
             double rowMid = settingsPanelX + settingsPanelW / 2.0;
             VoxyMapSettings.changeCameraSpeed(mouseX < rowMid ? -0.25 : 0.25);
@@ -498,7 +542,7 @@ public class MapScreen extends Screen {
     private void startXaeroTransition() {
         if (xaeroTransitionActive) return;
         dragging = false;
-        rotating = false;
+        middleDragging = false;
         xaeroTransitionActive = true;
         xaeroTransitionStartedAt = System.nanoTime();
     }
@@ -520,6 +564,7 @@ public class MapScreen extends Screen {
     }
 
     private void openXaeroWorldMap() {
+        VoxyMapGuiRenderer.close(minecraft);
         VoxyMapCameraController.deactivate();
         VoxyBridge.restoreEnvironmentalFogAfterMap();
         MapRenderSettingsGuard.restoreAfterMap(minecraft);
@@ -531,6 +576,7 @@ public class MapScreen extends Screen {
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
         syncWorldCamera();
+        VoxyMapGuiRenderer.open(minecraft);
         xaeroTransitionActive = false;
         xaeroTransitionStartedAt = 0L;
         if (minecraft.player != null) {
@@ -541,10 +587,27 @@ public class MapScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        double factor = scrollY > 0 ? 0.8 : 1.25;
-        blocksPerPixel = Mth.clamp(blocksPerPixel * factor, 0.125, 256.0);
-        syncWorldCamera();
+        if (scrollY == 0.0) {
+            return true;
+        }
+        double factor = Math.pow(0.82, scrollY);
+        zoomAt(mouseX, mouseY, factor);
         return true;
+    }
+
+    private void zoomAt(double mouseX, double mouseY, double factor) {
+        double oldBlocksPerPixel = blocksPerPixel;
+        double newBlocksPerPixel = Mth.clamp(oldBlocksPerPixel * factor, 0.125, 256.0);
+        if (newBlocksPerPixel == oldBlocksPerPixel) {
+            return;
+        }
+
+        syncWorldCamera();
+        GroundPoint anchor = mapPointAt(mouseX, mouseY);
+        blocksPerPixel = newBlocksPerPixel;
+        syncWorldCamera();
+        keepMapPointUnderMouse(anchor, mouseX, mouseY);
+        syncWorldCamera();
     }
 
     @Override
@@ -558,18 +621,18 @@ public class MapScreen extends Screen {
         }
         if (event.button() == GLFW.GLFW_MOUSE_BUTTON_1) {
             dragging = true;
-            dragStartMouseX = event.x();
-            dragStartMouseY = event.y();
-            dragStartViewX  = viewCenterX;
-            dragStartViewZ  = viewCenterZ;
+            middleDragging = false;
+            dragLastMouseX = event.x();
+            dragLastMouseY = event.y();
+            moveVelocityX = 0.0;
+            moveVelocityZ = 0.0;
             return true;
         }
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_2) {
-            rotating = true;
+        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+            middleDragging = true;
+            dragging = false;
             dragStartMouseX = event.x();
-            dragStartMouseY = event.y();
             dragStartYaw = viewYaw;
-            dragStartPitch = viewPitch;
             return true;
         }
         return super.mouseClicked(event, isInside);
@@ -581,8 +644,8 @@ public class MapScreen extends Screen {
             dragging = false;
             return true;
         }
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_2) {
-            rotating = false;
+        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+            middleDragging = false;
             return true;
         }
         return super.mouseReleased(event);
@@ -591,21 +654,14 @@ public class MapScreen extends Screen {
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
         if (dragging) {
-            double dragRight = -(event.x() - dragStartMouseX) * blocksPerPixel;
-            double dragForward = -(event.y() - dragStartMouseY) * blocksPerPixel;
-            double forwardX = -Math.sin(viewYaw);
-            double forwardZ = Math.cos(viewYaw);
-            double rightX = Math.cos(viewYaw);
-            double rightZ = Math.sin(viewYaw);
-            double targetX = dragStartViewX + rightX * dragRight + forwardX * dragForward;
-            double targetZ = dragStartViewZ + rightZ * dragRight + forwardZ * dragForward;
-            moveCenterToward(targetX, targetZ, Math.max(32.0, Math.min(MAX_DRAG_STEP_BLOCKS, blocksPerPixel * 24.0)));
+            panByPixels(event.x() - dragLastMouseX, event.y() - dragLastMouseY);
+            dragLastMouseX = event.x();
+            dragLastMouseY = event.y();
             syncWorldCamera();
             return true;
         }
-        if (rotating) {
+        if (middleDragging) {
             viewYaw = dragStartYaw + (event.x() - dragStartMouseX) * 0.01;
-            viewPitch = Mth.clamp(dragStartPitch + (event.y() - dragStartMouseY) * 0.003, 0.2, 1.1);
             syncWorldCamera();
             return true;
         }
@@ -621,35 +677,53 @@ public class MapScreen extends Screen {
         }
         if (keyCode == GLFW.GLFW_KEY_W || keyCode == GLFW.GLFW_KEY_S ||
                 keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_D ||
-                keyCode == GLFW.GLFW_KEY_Q || keyCode == GLFW.GLFW_KEY_E ||
-                keyCode == GLFW.GLFW_KEY_PAGE_UP || keyCode == GLFW.GLFW_KEY_PAGE_DOWN) {
+                keyCode == GLFW.GLFW_KEY_UP || keyCode == GLFW.GLFW_KEY_DOWN ||
+                keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_RIGHT) {
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_C && minecraft.player != null) {
             viewCenterX = minecraft.player.getX();
+            viewCenterY = MAP_VIEW_LEVEL;
             viewCenterZ = minecraft.player.getZ();
             syncWorldCamera();
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_EQUAL || keyCode == GLFW.GLFW_KEY_KP_ADD) {
-            blocksPerPixel = Mth.clamp(blocksPerPixel * 0.8, 0.125, 256.0);
-            syncWorldCamera();
+            zoomAt(lastZoomMouseX(), lastZoomMouseY(), 0.8);
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_MINUS || keyCode == GLFW.GLFW_KEY_KP_SUBTRACT) {
-            blocksPerPixel = Mth.clamp(blocksPerPixel * 1.25, 0.125, 256.0);
-            syncWorldCamera();
+            zoomAt(lastZoomMouseX(), lastZoomMouseY(), 1.25);
             return true;
         }
         return super.keyPressed(event);
     }
 
+    private double lastZoomMouseX() {
+        return Double.isNaN(lastMouseX) ? width / 2.0 : lastMouseX;
+    }
+
+    private double lastZoomMouseY() {
+        return Double.isNaN(lastMouseY) ? height / 2.0 : lastMouseY;
+    }
+
     @Override
     public void onClose() {
+        closeMapView();
+        super.onClose();
+    }
+
+    @Override
+    public void removed() {
+        closeMapView();
+        super.removed();
+    }
+
+    private void closeMapView() {
+        VoxyMapGuiRenderer.close(minecraft);
         VoxyMapCameraController.deactivate();
         VoxyBridge.restoreEnvironmentalFogAfterMap();
         MapRenderSettingsGuard.restoreAfterMap(minecraft);
-        super.onClose();
     }
 
     @Override
@@ -665,5 +739,8 @@ public class MapScreen extends Screen {
     @Override
     public boolean isInGameUi() {
         return true;
+    }
+
+    private record GroundPoint(double x, double z) {
     }
 }

@@ -2,7 +2,7 @@
 
 3D Maps Voxy Addon, also packaged as **VoxyMap**, is a client-side Fabric mod that adds a full-screen 3D world map powered by Voxy LOD data.
 
-The goal is to provide a large, cinematic world overview instead of a flat minimap: you can rotate the camera, zoom out, inspect terrain from far away.
+The goal is to provide a large, cinematic world overview instead of a flat minimap: you can grab the map, zoom toward the cursor, and inspect terrain from far away.
 
 https://modrinth.com/mod/3d-maps-voxy-addon
 
@@ -10,9 +10,8 @@ https://modrinth.com/mod/3d-maps-voxy-addon
 
 - Full-screen 3D map opened with the `M` key.
 - Voxy-powered terrain data for long-range world previews.
-- Smooth camera movement, zoom, rotation, and centering on the player.
+- Smooth map dragging, cursor-centered zoom, keyboard movement, and centering on the player.
 - Full support for English, Polish, and Russian languages.
-- Client command for debug logs: `/3dmaps debug on/off`.
 
 ## Requirements
 
@@ -33,24 +32,13 @@ VoxyMap is a client-side addon. It does not need to be installed on the server, 
 
 ### Map controls
 
-- `W/A/S/D` - move the map camera.
+- `Left mouse button` - grab and drag the map.
+- `Middle mouse button` - rotate the camera left or right.
+- `W/A/S/D` or `Arrow keys` - move the map camera.
 - `Shift` - move faster.
-- `Right mouse button` - rotate/look around.
-- `Mouse wheel` - zoom.
+- `Mouse wheel` - zoom toward the cursor.
 - `C` - center the map on the player.
 - `M` or `Esc` - close the map.
-
-### Debug command
-
-Debug logging is disabled by default.
-
-```text
-/3dmaps debug
-/3dmaps debug on
-/3dmaps debug off
-```
-
-Use debug logging only when collecting logs for bug reports.
 
 ## Building From Source
 
@@ -68,7 +56,7 @@ The compiled mod will be created in `build/libs`.
 
 ## Compatibility
 
-The mod uses Voxy internals through reflection, so compatibility can change when Voxy updates. Version `0.2.15-beta` is currently treated as tested.
+The mod integrates with the Voxy client API, so compatibility can change when Voxy updates. Version `0.2.15-beta` is currently treated as tested.
 
 ## License
 

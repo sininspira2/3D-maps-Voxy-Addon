@@ -2,14 +2,11 @@ package com.voxymap.client.map;
 
 import me.cortex.voxy.client.config.VoxyConfig;
 import net.fabricmc.loader.api.FabricLoader;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Set;
 
 public class VoxyBridge {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger("voxymap.bridge");
     private static final Set<String> TESTED_VOXY_VERSIONS = Set.of("0.2.15-beta");
 
     private static final boolean VOXY_PRESENT;
@@ -56,7 +53,6 @@ public class VoxyBridge {
                 return;
             }
             config.useEnvironmentalFog = value;
-            LOGGER.info("[VoxyMap] Voxy environmental fog {} for the 3D map.", value ? "restored" : "disabled");
         } catch (Throwable ignored) {
         }
     }

@@ -45,6 +45,7 @@ public class MapScreen extends Screen {
     private double moveVelocityZ = 0.0;
     private long lastFrameNanos = 0L;
     private long openedAtNanos = 0L;
+    private boolean openLogged = false;
     private boolean xaeroTransitionActive = false;
     private long xaeroTransitionStartedAt = 0L;
     private int xaeroButtonX = -1;
@@ -69,6 +70,10 @@ public class MapScreen extends Screen {
     private int timeRowY = -1;
     private static final int SETTINGS_ROW_HEIGHT = 24;
     private static final int SPEED_BUTTON_SIZE = 18;
+    private static final int HUD_MARGIN = 12;
+    private static final int HUD_GAP = 6;
+    private static final int HUD_BUTTON_HEIGHT = 24;
+    private static final int KEY_HINT_HEIGHT = 22;
 
     private static final int BG = 0xFF080810;
 
@@ -98,6 +103,10 @@ public class MapScreen extends Screen {
             VoxyMapClient.LOGGER.warn("[VoxyMap] You are using Voxy {}, which has not been tested with VoxyMap. Visual glitches or crashes may occur. Tested Voxy versions: {}.",
                     VoxyBridge.getVoxyVersion(), VoxyBridge.testedVoxyVersionsText());
             warnedUntestedVoxyVersion = true;
+        }
+        if (!openLogged) {
+            VoxyMapClient.LOGGER.info("[VoxyMap] Map opened.");
+            openLogged = true;
         }
     }
 
@@ -323,27 +332,32 @@ public class MapScreen extends Screen {
 
     private void drawWorldViewerOverlay(GuiGraphics g, int mouseX, int mouseY) {
         int slide = (int) ((1.0 - openingProgress()) * 28.0);
-        int topX = 12;
-        int topY = 12 - slide;
-        int topW = Math.min(width - 24, 328);
-        drawGlassPanel(g, topX, topY, topW, 52, 0xAA030914, 0xFF3BA4FF);
-        g.drawString(minecraft.font, Component.literal("VoxyMap 3D"), topX + 10, topY + 7, 0xFFFFFFFF);
+        int topX = HUD_MARGIN;
+        int topY = HUD_MARGIN - slide;
+        String title = "VoxyMap 3D";
+        String playerText = "";
         if (minecraft.player != null) {
             int px = (int) minecraft.player.getX();
             int py = (int) minecraft.player.getY();
             int pz = (int) minecraft.player.getZ();
-            g.drawString(minecraft.font, Component.translatable("overlay.voxymap.player").getString() + "  " + px + " / " + py + " / " + pz, topX + 10, topY + 21, 0xFFDFF8FF);
+            playerText = Component.translatable("overlay.voxymap.player").getString() + "  " + px + " / " + py + " / " + pz;
         }
-        g.drawString(minecraft.font, Component.translatable("overlay.voxymap.camera").getString() + "  " + (int) viewCenterX + " / " + (int) viewCenterY + " / " + (int) viewCenterZ
-                        + "   " + Component.translatable("overlay.voxymap.zoom").getString() + " " + String.format("%.2f", blocksPerPixel),
-                topX + 10, topY + 36, 0xFF9FD8FF);
+        String cameraText = Component.translatable("overlay.voxymap.camera").getString() + "  " + (int) viewCenterX + " / " + (int) viewCenterY + " / " + (int) viewCenterZ
+                + "   " + Component.translatable("overlay.voxymap.zoom").getString() + " " + String.format("%.2f", blocksPerPixel);
+        int topW = Math.max(1, Math.min(width - HUD_MARGIN * 2, Math.max(minecraft.font.width(title), Math.max(minecraft.font.width(playerText), minecraft.font.width(cameraText))) + 20));
+        int topH = minecraft.player != null ? 42 : 30;
+        drawGlassPanel(g, topX, topY, topW, topH, 0xAA030914, 0xFF3BA4FF);
+        g.drawString(minecraft.font, Component.literal(title), topX + 10, topY + 5, 0xFFFFFFFF);
+        if (minecraft.player != null) {
+            g.drawString(minecraft.font, playerText, topX + 10, topY + 18, 0xFFDFF8FF);
+        }
+        g.drawString(minecraft.font, cameraText, topX + 10, topY + (minecraft.player != null ? 31 : 18), 0xFF9FD8FF);
 
-        drawKeyHints(g, 12, height - 34 + slide);
-
-        drawXaeroButton(g, mouseX, mouseY, slide);
+        int footerTop = drawFooter(g, slide);
+        drawXaeroButton(g, mouseX, mouseY, slide, topX, topY, topW, topH);
         drawSettingsButton(g, mouseX, mouseY, slide);
         if (settingsOpen) {
-            drawSettingsPanel(g, mouseX, mouseY, slide);
+            drawSettingsPanel(g, footerTop);
         }
     }
 
@@ -356,10 +370,10 @@ public class MapScreen extends Screen {
 
     private void drawSettingsButton(GuiGraphics g, int mouseX, int mouseY, int slide) {
         String label = Component.translatable("overlay.voxymap.settings").getString();
-        settingsButtonW = Math.min(156, Math.max(104, minecraft.font.width(label) + 28));
-        settingsButtonH = 24;
-        settingsButtonX = width - settingsButtonW - 12;
-        settingsButtonY = height - 36 + slide;
+        settingsButtonW = Math.min(width - HUD_MARGIN * 2, Math.min(156, Math.max(104, minecraft.font.width(label) + 28)));
+        settingsButtonH = HUD_BUTTON_HEIGHT;
+        settingsButtonX = width - settingsButtonW - HUD_MARGIN;
+        settingsButtonY = xaeroButtonW > 0 ? xaeroButtonY + xaeroButtonH + HUD_GAP : HUD_MARGIN - slide;
         boolean hovered = isInsideSettingsButton(mouseX, mouseY);
         int bg = settingsOpen ? 0xD014283D : (hovered ? 0xCC112338 : 0x99030914);
         int accent = settingsOpen || hovered ? 0xFF7DEBFF : 0xFF3BA4FF;
@@ -372,11 +386,11 @@ public class MapScreen extends Screen {
         g.drawString(minecraft.font, label, settingsButtonX + 26, settingsButtonY + 8, 0xFFE9F2FF);
     }
 
-    private void drawSettingsPanel(GuiGraphics g, int mouseX, int mouseY, int slide) {
-        settingsPanelW = Math.min(360, width - 24);
+    private void drawSettingsPanel(GuiGraphics g, int footerTop) {
+        settingsPanelW = Math.min(360, width - HUD_MARGIN * 2);
         settingsPanelH = 118;
-        settingsPanelX = width - settingsPanelW - 12;
-        settingsPanelY = Math.max(12, height - settingsPanelH - 68 + slide);
+        settingsPanelX = width - settingsPanelW - HUD_MARGIN;
+        settingsPanelY = Math.max(HUD_MARGIN, footerTop - settingsPanelH - HUD_GAP);
         drawGlassPanel(g, settingsPanelX, settingsPanelY, settingsPanelW, settingsPanelH, 0xDD030914, 0xFF3BA4FF);
 
         int x = settingsPanelX + 12;
@@ -424,8 +438,25 @@ public class MapScreen extends Screen {
         g.drawCenteredString(minecraft.font, label, x + SPEED_BUTTON_SIZE / 2, y + 5, 0xFFFFFFFF);
     }
 
-    private void drawKeyHints(GuiGraphics g, int x, int y) {
-        String[][] hints = {
+    private int drawFooter(GuiGraphics g, int slide) {
+        String[][] hints = keyHints();
+        int contentWidth = keyHintsWidth(hints);
+        float availableWidth = Math.max(1, width - HUD_MARGIN * 2);
+        float scale = Math.min(1.0f, availableWidth / contentWidth);
+        int visualHeight = Math.max(1, Math.round(KEY_HINT_HEIGHT * scale));
+        int footerX = HUD_MARGIN;
+        int footerY = height - HUD_MARGIN - visualHeight + slide;
+
+        g.pose().pushMatrix();
+        g.pose().translate(footerX, footerY);
+        g.pose().scale(scale, scale);
+        drawKeyHints(g, hints, 0, 0);
+        g.pose().popMatrix();
+        return footerY;
+    }
+
+    private String[][] keyHints() {
+        return new String[][] {
                 {Component.translatable("overlay.voxymap.key.drag.button").getString(), Component.translatable("overlay.voxymap.key.drag").getString()},
                 {Component.translatable("overlay.voxymap.key.rotate.button").getString(), Component.translatable("overlay.voxymap.key.rotate").getString()},
                 {Component.translatable("overlay.voxymap.key.move.button").getString(), Component.translatable("overlay.voxymap.key.move").getString()},
@@ -434,25 +465,36 @@ public class MapScreen extends Screen {
                 {Component.translatable("overlay.voxymap.key.center.button").getString(), Component.translatable("overlay.voxymap.key.center").getString()},
                 {Component.translatable("overlay.voxymap.key.close.button").getString(), Component.translatable("overlay.voxymap.key.close").getString()}
         };
-        int currentX = x;
-        int maxX = width - 12;
+    }
+
+    private int keyHintsWidth(String[][] hints) {
+        int width = 0;
         for (String[] hint : hints) {
-            int w = minecraft.font.width(hint[0]) + minecraft.font.width(hint[1]) + 22;
-            if (currentX + w > maxX) {
-                break;
-            }
-            drawGlassPanel(g, currentX, y, w, 22, 0x99030914, 0xFF3BA4FF);
+            width += hintWidth(hint) + HUD_GAP;
+        }
+        return width - HUD_GAP;
+    }
+
+    private void drawKeyHints(GuiGraphics g, String[][] hints, int x, int y) {
+        int currentX = x;
+        for (String[] hint : hints) {
+            int w = hintWidth(hint);
+            drawGlassPanel(g, currentX, y, w, KEY_HINT_HEIGHT, 0x99030914, 0xFF3BA4FF);
             g.drawString(minecraft.font, hint[0], currentX + 9, y + 7, 0xFFFFFFFF);
             g.drawString(minecraft.font, hint[1], currentX + 14 + minecraft.font.width(hint[0]), y + 7, 0xFFBFD8FF);
-            currentX += w + 6;
+            currentX += w + HUD_GAP;
         }
+    }
+
+    private int hintWidth(String[] hint) {
+        return minecraft.font.width(hint[0]) + minecraft.font.width(hint[1]) + 22;
     }
 
     private String onOff(boolean enabled) {
         return Component.translatable(enabled ? "screen.voxymap.settings.on" : "screen.voxymap.settings.off").getString();
     }
 
-    private void drawXaeroButton(GuiGraphics g, int mouseX, int mouseY, int slide) {
+    private void drawXaeroButton(GuiGraphics g, int mouseX, int mouseY, int slide, int topX, int topY, int topW, int topH) {
         if (!XaeroWorldMapBridge.isAvailable()) {
             xaeroButtonX = -1;
             xaeroButtonY = -1;
@@ -462,10 +504,13 @@ public class MapScreen extends Screen {
         }
 
         String label = Component.translatable("overlay.voxymap.xaero").getString();
-        xaeroButtonW = Math.min(180, Math.max(118, minecraft.font.width(label) + 36));
-        xaeroButtonH = 24;
-        xaeroButtonX = width - xaeroButtonW - 12;
-        xaeroButtonY = 12 - slide;
+        xaeroButtonW = Math.min(width - HUD_MARGIN * 2, Math.min(180, Math.max(118, minecraft.font.width(label) + 36)));
+        xaeroButtonH = HUD_BUTTON_HEIGHT;
+        xaeroButtonX = width - xaeroButtonW - HUD_MARGIN;
+        xaeroButtonY = HUD_MARGIN - slide;
+        if (xaeroButtonX < topX + topW + HUD_GAP) {
+            xaeroButtonY = topY + topH + HUD_GAP;
+        }
         boolean hovered = isInsideXaeroButton(mouseX, mouseY);
         int bg = hovered ? 0xCC112338 : 0x99030914;
         int accent = hovered ? 0xFF7DEBFF : 0xFF3BA4FF;
@@ -716,6 +761,10 @@ public class MapScreen extends Screen {
     @Override
     public void removed() {
         closeMapView();
+        if (openLogged) {
+            VoxyMapClient.LOGGER.info("[VoxyMap] Map closed.");
+            openLogged = false;
+        }
         super.removed();
     }
 

@@ -21,7 +21,6 @@ public class VoxyMapClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        LOGGER.info("[VoxyMap] Initializing VoxyMap client...");
         VoxyMapSettings.load();
 
         KeyMapping.Category voxyMapCategory = KeyMapping.Category.register(
@@ -43,6 +42,6 @@ public class VoxyMapClient implements ClientModInitializer {
             }
         });
 
-        LOGGER.info("[VoxyMap] VoxyMap initialized! Press M to open the map.");
+        LOGGER.info("[VoxyMap] Loaded. Press M to open the map.");
     }
 }

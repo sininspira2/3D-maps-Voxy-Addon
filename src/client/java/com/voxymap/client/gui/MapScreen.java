@@ -24,8 +24,6 @@ public class MapScreen extends Screen {
     private static final double MAP_VIEW_LEVEL = 320.0;
     private static final double MAX_KEYBOARD_CAMERA_SPEED = 640.0;
     private static final double MAX_DRAG_STEP_BLOCKS = 1536.0;
-    private static boolean warnedUntestedVoxyVersion = false;
-
     private double viewCenterX;
     private double viewCenterY;
     private double viewCenterZ;
@@ -98,11 +96,6 @@ public class MapScreen extends Screen {
             VoxyMapGuiRenderer.open(minecraft);
         } else {
             VoxyMapCameraController.deactivate();
-        }
-        if (!VoxyBridge.isTestedVoxyVersion() && !warnedUntestedVoxyVersion) {
-            VoxyMapClient.LOGGER.warn("[VoxyMap] You are using Voxy {}, which has not been tested with VoxyMap. Visual glitches or crashes may occur. Tested Voxy versions: {}.",
-                    VoxyBridge.getVoxyVersion(), VoxyBridge.testedVoxyVersionsText());
-            warnedUntestedVoxyVersion = true;
         }
         if (!openLogged) {
             VoxyMapClient.LOGGER.info("[VoxyMap] Map opened.");

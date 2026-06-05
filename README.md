@@ -19,7 +19,7 @@ https://modrinth.com/mod/3d-maps-voxy-addon
 - Java `21`
 - Fabric Loader `0.19.2` or newer
 - Fabric API `0.141.3+1.21.11` or compatible
-- Voxy, tested with `0.2.15-beta`
+- Voxy
 
 VoxyMap is a client-side addon. It does not need to be installed on the server, but server rules may still restrict minimap, world map, LOD, or waypoint mods. Check the rules before using it on public servers.
 
@@ -56,7 +56,7 @@ The compiled mod will be created in `build/libs`.
 
 ## Compatibility
 
-The mod integrates with the Voxy client API, so compatibility can change when Voxy updates. Version `0.2.15-beta` is currently treated as tested.
+The mod integrates with the Voxy client API. Voxy is required, but VoxyMap does not restrict the installed Voxy version.
 
 ## License
 

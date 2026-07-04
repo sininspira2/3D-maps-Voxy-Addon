@@ -62,6 +62,21 @@ java {
 
 jar {
 	inputs.property "projectName", project.name
+	exclude("net/minecraft/client/gui/GuiGraphicsExtractor.class")
+	from("LICENSE") {
+		rename { "${it}_${project.name}" }
+	}
+}
+
+tasks.register("officialRuntimeJar", Jar) {
+	dependsOn "classes", "clientClasses"
+	archiveFileName = "${project.name}-${project.version}.jar"
+	destinationDirectory = layout.buildDirectory.dir("libs")
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+	from(sourceSets.main.output)
+	from(sourceSets.client.output)
+	exclude("net/minecraft/client/gui/GuiGraphicsExtractor.class")
 	from("LICENSE") {
 		rename { "${it}_${project.name}" }
 	}

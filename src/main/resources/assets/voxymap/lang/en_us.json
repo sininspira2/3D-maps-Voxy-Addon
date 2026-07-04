@@ -32,12 +32,6 @@
   "screen.voxymap.settings.title": "Map settings",
   "screen.voxymap.settings.pause": "Pause singleplayer",
   "screen.voxymap.settings.speed": "Camera speed",
-  "screen.voxymap.settings.time": "Time of day",
   "screen.voxymap.settings.on": "On",
-  "screen.voxymap.settings.off": "Off",
-  "setting.voxymap.time.real": "Real",
-  "setting.voxymap.time.day": "Day",
-  "setting.voxymap.time.sunset": "Sunset",
-  "setting.voxymap.time.night": "Night",
-  "setting.voxymap.time.dawn": "Dawn"
+  "screen.voxymap.settings.off": "Off"
 }

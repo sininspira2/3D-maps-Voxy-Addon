@@ -32,12 +32,6 @@
   "screen.voxymap.settings.title": "Ustawienia mapy",
   "screen.voxymap.settings.pause": "Pauza w singleplayer",
   "screen.voxymap.settings.speed": "Szybko\u015b\u0107 kamery",
-  "screen.voxymap.settings.time": "Pora dnia",
   "screen.voxymap.settings.on": "W\u0142.",
-  "screen.voxymap.settings.off": "Wy\u0142.",
-  "setting.voxymap.time.real": "Realna",
-  "setting.voxymap.time.day": "Dzie\u0144",
-  "setting.voxymap.time.sunset": "Zach\u00f3d",
-  "setting.voxymap.time.night": "Noc",
-  "setting.voxymap.time.dawn": "\u015awit"
+  "screen.voxymap.settings.off": "Wy\u0142."
 }

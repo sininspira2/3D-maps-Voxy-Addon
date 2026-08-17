@@ -22,8 +22,8 @@ public class VoxyMapClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             long window = client.getWindow().handle();
             boolean pressed = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_M) == GLFW.GLFW_PRESS;
-            if (pressed && !openMapPressed && client.screen == null) {
-                client.setScreen(new MapScreen());
+            if (pressed && !openMapPressed && client.gui.screen() == null) {
+                client.gui.setScreen(new MapScreen());
             }
             openMapPressed = pressed;
         });

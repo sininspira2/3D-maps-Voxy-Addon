@@ -8,7 +8,6 @@ import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyMapGuiRenderer;
 import com.voxymap.client.map.VoxyMapSettings;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -104,7 +103,7 @@ public class MapScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
         lastMouseX = mouseX;
         lastMouseY = mouseY;
         if (isUnsupportedDimension()) {
@@ -112,7 +111,7 @@ public class MapScreen extends Screen {
             VoxyMapCameraController.deactivate();
             drawUnsupportedDimension(g);
             drawOpeningAnimation(g);
-            super.render(g, mouseX, mouseY, delta);
+            super.extractRenderState(g, mouseX, mouseY, delta);
             return;
         }
 
@@ -129,32 +128,11 @@ public class MapScreen extends Screen {
                 return;
             }
         }
-        super.render(g, mouseX, mouseY, delta);
+        super.extractRenderState(g, mouseX, mouseY, delta);
     }
 
-    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
-        lastMouseX = mouseX;
-        lastMouseY = mouseY;
-        if (isUnsupportedDimension()) {
-            VoxyMapGuiRenderer.close(minecraft);
-            VoxyMapCameraController.deactivate();
-            drawUnsupportedDimension(g);
-            drawOpeningAnimation(g);
-            return;
-        }
-
-        updateSmoothControls();
-        VoxyBridge.suppressEnvironmentalFogForMap();
-        MapRenderSettingsGuard.applyForMap(minecraft);
-        syncWorldCamera();
-        drawWorldViewerOverlay(g, mouseX, mouseY);
-        drawOpeningAnimation(g);
-        if (xaeroTransitionActive) {
-            drawXaeroTransition(g);
-            if (System.nanoTime() - xaeroTransitionStartedAt >= XAERO_TRANSITION_NANOS) {
-                openXaeroWorldMap();
-            }
-        }
+    @Override
+    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
     }
 
     private double openingProgress() {
@@ -282,13 +260,6 @@ public class MapScreen extends Screen {
         }
     }
 
-    @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float delta) {
-    }
-
-    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
-    }
-
     private void syncWorldCamera() {
         if (!isUnsupportedDimension()) {
             VoxyMapCameraController.update(minecraft, viewCenterX, viewCenterY, viewCenterZ, viewYaw, viewPitch, blocksPerPixel);
@@ -303,346 +274,12 @@ public class MapScreen extends Screen {
         return "minecraft:the_nether".equals(dimension);
     }
 
-    private void drawUnsupportedDimension(GuiGraphics g) {
-        g.fill(0, 0, width, height, BG);
-        int boxW = Math.min(width - 40, 420);
-        int boxH = 82;
-        int x = (width - boxW) / 2;
-        int y = (height - boxH) / 2;
-        g.fill(x - 2, y - 2, x + boxW + 2, y + boxH + 2, 0x553BA4FF);
-        g.fill(x, y, x + boxW, y + boxH, 0xEE030914);
-        g.fill(x, y, x + 4, y + boxH, 0xFF3BA4FF);
-        g.drawCenteredString(minecraft.font, Component.translatable("screen.voxymap.unsupported.title"), width / 2, y + 22, 0xFFFFFFFF);
-        g.drawCenteredString(minecraft.font, Component.translatable(unsupportedDimensionMessageKey()), width / 2, y + 46, 0xFFBFD8FF);
-    }
-
     private String unsupportedDimensionMessageKey() {
         if (minecraft != null && minecraft.level != null
                 && "minecraft:the_end".equals(minecraft.level.dimension().identifier().toString())) {
             return "screen.voxymap.unsupported.end";
         }
         return "screen.voxymap.unsupported.nether";
-    }
-
-    private void drawOpeningAnimation(GuiGraphics g) {
-        double progress = openingProgress();
-        if (progress >= 0.995) return;
-
-        int alpha = (int) (185 * (1.0 - progress));
-        int dim = (alpha << 24) | 0x030914;
-        g.fill(0, 0, width, height, dim);
-
-        int bandHeight = (int) ((height * 0.28) * (1.0 - progress));
-        if (bandHeight > 0) {
-            g.fill(0, 0, width, bandHeight, 0xDD030914);
-            g.fill(0, height - bandHeight, width, height, 0xDD030914);
-            g.fill(0, bandHeight, width, bandHeight + 2, 0xFF3BA4FF);
-            g.fill(0, height - bandHeight - 2, width, height - bandHeight, 0xFF3BA4FF);
-        }
-
-        int scanY = (int) (height * progress);
-        g.fill(0, scanY - 1, width, scanY + 1, 0xAA72D7FF);
-        String title = "VOXYMAP";
-        int titleAlpha = (int) (255 * (1.0 - Math.abs(progress - 0.35) / 0.35));
-        if (titleAlpha > 0) {
-            int color = (Mth.clamp(titleAlpha, 0, 255) << 24) | 0xDFF8FF;
-            g.drawCenteredString(minecraft.font, title, width / 2, height / 2 - 5, color);
-        }
-    }
-
-    private void drawWorldViewerOverlay(GuiGraphics g, int mouseX, int mouseY) {
-        int slide = (int) ((1.0 - openingProgress()) * 28.0);
-        int topX = HUD_MARGIN;
-        int topY = HUD_MARGIN - slide;
-        String title = "VoxyMap 3D";
-        String playerText = "";
-        if (minecraft.player != null) {
-            int px = (int) minecraft.player.getX();
-            int py = (int) minecraft.player.getY();
-            int pz = (int) minecraft.player.getZ();
-            playerText = Component.translatable("overlay.voxymap.player").getString() + "  " + px + " / " + py + " / " + pz;
-        }
-        String cameraText = Component.translatable("overlay.voxymap.camera").getString() + "  " + (int) viewCenterX + " / " + (int) viewCenterY + " / " + (int) viewCenterZ
-                + "   " + Component.translatable("overlay.voxymap.zoom").getString() + " " + String.format("%.2f", blocksPerPixel);
-        int topW = Math.max(1, Math.min(width - HUD_MARGIN * 2, Math.max(minecraft.font.width(title), Math.max(minecraft.font.width(playerText), minecraft.font.width(cameraText))) + 20));
-        int topH = minecraft.player != null ? 42 : 30;
-        drawGlassPanel(g, topX, topY, topW, topH, 0xAA030914, 0xFF3BA4FF);
-        g.drawString(minecraft.font, Component.literal(title), topX + 10, topY + 5, 0xFFFFFFFF);
-        if (minecraft.player != null) {
-            g.drawString(minecraft.font, playerText, topX + 10, topY + 18, 0xFFDFF8FF);
-        }
-        g.drawString(minecraft.font, cameraText, topX + 10, topY + (minecraft.player != null ? 31 : 18), 0xFF9FD8FF);
-
-        int footerTop = drawFooter(g, slide);
-        drawXaeroButton(g, mouseX, mouseY, slide, topX, topY, topW, topH);
-        drawSettingsButton(g, mouseX, mouseY, slide);
-        if (settingsOpen) {
-            drawSettingsPanel(g, footerTop);
-        }
-    }
-
-    private void drawGlassPanel(GuiGraphics g, int x, int y, int w, int h, int bg, int accent) {
-        g.fill(x, y, x + w, y + h, bg);
-        g.fill(x, y, x + 2, y + h, accent);
-        g.fill(x, y, x + w, y + 1, 0x33FFFFFF);
-        g.fill(x, y + h - 1, x + w, y + h, 0x55000000);
-    }
-
-    private void drawSettingsButton(GuiGraphics g, int mouseX, int mouseY, int slide) {
-        String label = Component.translatable("overlay.voxymap.settings").getString();
-        settingsButtonW = Math.min(width - HUD_MARGIN * 2, Math.min(156, Math.max(104, minecraft.font.width(label) + 28)));
-        settingsButtonH = HUD_BUTTON_HEIGHT;
-        settingsButtonX = width - settingsButtonW - HUD_MARGIN;
-        settingsButtonY = xaeroButtonW > 0 ? xaeroButtonY + xaeroButtonH + HUD_GAP : HUD_MARGIN - slide;
-        boolean hovered = isInsideSettingsButton(mouseX, mouseY);
-        int bg = settingsOpen ? 0xD014283D : (hovered ? 0xCC112338 : 0x99030914);
-        int accent = settingsOpen || hovered ? 0xFF7DEBFF : 0xFF3BA4FF;
-
-        drawGlassPanel(g, settingsButtonX, settingsButtonY, settingsButtonW, settingsButtonH, bg, accent);
-        int gearX = settingsButtonX + 13;
-        int gearY = settingsButtonY + 12;
-        g.fill(gearX - 4, gearY - 1, gearX + 4, gearY + 1, accent);
-        g.fill(gearX - 1, gearY - 4, gearX + 1, gearY + 4, accent);
-        g.drawString(minecraft.font, label, settingsButtonX + 26, settingsButtonY + 8, 0xFFE9F2FF);
-    }
-
-    private void drawSettingsPanel(GuiGraphics g, int footerTop) {
-        settingsPanelW = Math.min(360, width - HUD_MARGIN * 2);
-        settingsPanelH = 94;
-        settingsPanelX = width - settingsPanelW - HUD_MARGIN;
-        settingsPanelY = Math.max(HUD_MARGIN, footerTop - settingsPanelH - HUD_GAP);
-        drawGlassPanel(g, settingsPanelX, settingsPanelY, settingsPanelW, settingsPanelH, 0xDD030914, 0xFF3BA4FF);
-
-        int x = settingsPanelX + 12;
-        int y = settingsPanelY + 10;
-        pauseRowY = y + 20;
-        speedRowY = y + 44;
-        g.drawString(minecraft.font, Component.translatable("screen.voxymap.settings.title"), x, y, 0xFFFFFFFF);
-        drawSettingValue(g, x, pauseRowY, "screen.voxymap.settings.pause", onOff(VoxyMapSettings.pauseSingleplayer()), 0);
-        drawSettingValue(g, x, speedRowY, "screen.voxymap.settings.speed", String.format("%.2fx", VoxyMapSettings.cameraSpeedMultiplier()), 1);
-    }
-
-    private void drawSettingValue(GuiGraphics g, int x, int y, String labelKey, String value, int row) {
-        int rowX = settingsPanelX + 8;
-        int rowW = settingsPanelW - 16;
-        g.fill(rowX, y, rowX + rowW, y + SETTINGS_ROW_HEIGHT - 2, 0x66102034);
-        g.fill(rowX, y, rowX + 2, y + SETTINGS_ROW_HEIGHT - 2, 0xFF3BA4FF);
-        g.drawString(minecraft.font, Component.translatable(labelKey), x, y + 7, 0xFFDFF8FF);
-        int valueW = Math.max(62, minecraft.font.width(value) + 14);
-        int valueX = settingsPanelX + settingsPanelW - valueW - 14;
-        if (row == 1) {
-            valueX -= (SPEED_BUTTON_SIZE + 6);
-        }
-        drawValueBox(g, valueX, y + 3, valueW, 16, value);
-        if (row == 1) {
-            speedMinusX = valueX - SPEED_BUTTON_SIZE - 6;
-            speedMinusY = y + 2;
-            speedPlusX = valueX + valueW + 6;
-            speedPlusY = y + 2;
-            drawSmallButton(g, speedMinusX, speedMinusY, "-", 0xCC102034);
-            drawSmallButton(g, speedPlusX, speedPlusY, "+", 0xCC102034);
-        }
-    }
-
-    private void drawValueBox(GuiGraphics g, int x, int y, int w, int h, String value) {
-        g.fill(x, y, x + w, y + h, 0xAA102034);
-        g.fill(x, y, x + 2, y + h, 0xFF3BA4FF);
-        g.drawString(minecraft.font, value, x + 7, y + 4, 0xFFFFFFFF);
-    }
-
-    private void drawSmallButton(GuiGraphics g, int x, int y, String label, int bg) {
-        g.fill(x, y, x + SPEED_BUTTON_SIZE, y + SPEED_BUTTON_SIZE, bg);
-        g.fill(x, y, x + 2, y + SPEED_BUTTON_SIZE, 0xFF7DEBFF);
-        g.drawCenteredString(minecraft.font, label, x + SPEED_BUTTON_SIZE / 2, y + 5, 0xFFFFFFFF);
-    }
-
-    private int drawFooter(GuiGraphics g, int slide) {
-        String[][] hints = keyHints();
-        int contentWidth = keyHintsWidth(hints);
-        float availableWidth = Math.max(1, width - HUD_MARGIN * 2);
-        float scale = Math.min(1.0f, availableWidth / contentWidth);
-        int visualHeight = Math.max(1, Math.round(KEY_HINT_HEIGHT * scale));
-        int footerX = HUD_MARGIN;
-        int footerY = height - HUD_MARGIN - visualHeight + slide;
-
-        g.pose().pushMatrix();
-        g.pose().translate(footerX, footerY);
-        g.pose().scale(scale, scale);
-        drawKeyHints(g, hints, 0, 0);
-        g.pose().popMatrix();
-        return footerY;
-    }
-
-    private String[][] keyHints() {
-        return new String[][] {
-                {Component.translatable("overlay.voxymap.key.drag.button").getString(), Component.translatable("overlay.voxymap.key.drag").getString()},
-                {Component.translatable("overlay.voxymap.key.rotate.button").getString(), Component.translatable("overlay.voxymap.key.rotate").getString()},
-                {Component.translatable("overlay.voxymap.key.move.button").getString(), Component.translatable("overlay.voxymap.key.move").getString()},
-                {Component.translatable("overlay.voxymap.key.fast.button").getString(), Component.translatable("overlay.voxymap.key.fast").getString()},
-                {Component.translatable("overlay.voxymap.key.zoom.button").getString(), Component.translatable("overlay.voxymap.key.zoom").getString()},
-                {Component.translatable("overlay.voxymap.key.center.button").getString(), Component.translatable("overlay.voxymap.key.center").getString()},
-                {Component.translatable("overlay.voxymap.key.close.button").getString(), Component.translatable("overlay.voxymap.key.close").getString()}
-        };
-    }
-
-    private int keyHintsWidth(String[][] hints) {
-        int width = 0;
-        for (String[] hint : hints) {
-            width += hintWidth(hint) + HUD_GAP;
-        }
-        return width - HUD_GAP;
-    }
-
-    private void drawKeyHints(GuiGraphics g, String[][] hints, int x, int y) {
-        int currentX = x;
-        for (String[] hint : hints) {
-            int w = hintWidth(hint);
-            drawGlassPanel(g, currentX, y, w, KEY_HINT_HEIGHT, 0x99030914, 0xFF3BA4FF);
-            g.drawString(minecraft.font, hint[0], currentX + 9, y + 7, 0xFFFFFFFF);
-            g.drawString(minecraft.font, hint[1], currentX + 14 + minecraft.font.width(hint[0]), y + 7, 0xFFBFD8FF);
-            currentX += w + HUD_GAP;
-        }
-    }
-
-    private int hintWidth(String[] hint) {
-        return minecraft.font.width(hint[0]) + minecraft.font.width(hint[1]) + 22;
-    }
-
-    private String onOff(boolean enabled) {
-        return Component.translatable(enabled ? "screen.voxymap.settings.on" : "screen.voxymap.settings.off").getString();
-    }
-
-    private void drawXaeroButton(GuiGraphics g, int mouseX, int mouseY, int slide, int topX, int topY, int topW, int topH) {
-        if (!XaeroWorldMapBridge.isAvailable()) {
-            xaeroButtonX = -1;
-            xaeroButtonY = -1;
-            xaeroButtonW = 0;
-            xaeroButtonH = 0;
-            return;
-        }
-
-        String label = Component.translatable("overlay.voxymap.xaero").getString();
-        xaeroButtonW = Math.min(width - HUD_MARGIN * 2, Math.min(180, Math.max(118, minecraft.font.width(label) + 36)));
-        xaeroButtonH = HUD_BUTTON_HEIGHT;
-        xaeroButtonX = width - xaeroButtonW - HUD_MARGIN;
-        xaeroButtonY = HUD_MARGIN - slide;
-        if (xaeroButtonX < topX + topW + HUD_GAP) {
-            xaeroButtonY = topY + topH + HUD_GAP;
-        }
-        boolean hovered = isInsideXaeroButton(mouseX, mouseY);
-        int bg = hovered ? 0xCC112338 : 0x99030914;
-        int accent = hovered ? 0xFF7DEBFF : 0xFF3BA4FF;
-
-        g.fill(xaeroButtonX, xaeroButtonY, xaeroButtonX + xaeroButtonW, xaeroButtonY + xaeroButtonH, bg);
-        g.fill(xaeroButtonX, xaeroButtonY, xaeroButtonX + 2, xaeroButtonY + xaeroButtonH, accent);
-        int iconX = xaeroButtonX + 12;
-        int iconY = xaeroButtonY + 12;
-        g.fill(iconX - 5, iconY - 5, iconX + 5, iconY + 5, 0xFF102A38);
-        g.fill(iconX - 4, iconY - 1, iconX + 4, iconY + 1, accent);
-        g.fill(iconX - 1, iconY - 4, iconX + 1, iconY + 4, accent);
-        g.drawString(minecraft.font, label, xaeroButtonX + 28, xaeroButtonY + 8, 0xFFE9F2FF);
-    }
-
-    private boolean isInsideXaeroButton(double mouseX, double mouseY) {
-        return xaeroButtonW > 0
-                && mouseX >= xaeroButtonX && mouseX <= xaeroButtonX + xaeroButtonW
-                && mouseY >= xaeroButtonY && mouseY <= xaeroButtonY + xaeroButtonH;
-    }
-
-    private boolean isInsideSettingsButton(double mouseX, double mouseY) {
-        return settingsButtonW > 0
-                && mouseX >= settingsButtonX && mouseX <= settingsButtonX + settingsButtonW
-                && mouseY >= settingsButtonY && mouseY <= settingsButtonY + settingsButtonH;
-    }
-
-    private boolean isInsideSettingsPanel(double mouseX, double mouseY) {
-        return settingsOpen && settingsPanelW > 0
-                && mouseX >= settingsPanelX && mouseX <= settingsPanelX + settingsPanelW
-                && mouseY >= settingsPanelY && mouseY <= settingsPanelY + settingsPanelH;
-    }
-
-    private boolean handleSettingsClick(double mouseX, double mouseY) {
-        if (isInsideSettingsButton(mouseX, mouseY)) {
-            settingsOpen = !settingsOpen;
-            return true;
-        }
-        if (!isInsideSettingsPanel(mouseX, mouseY)) {
-            if (settingsOpen) {
-                settingsOpen = false;
-                return true;
-            }
-            return false;
-        }
-
-        if (mouseX >= speedMinusX && mouseX <= speedMinusX + SPEED_BUTTON_SIZE
-                && mouseY >= speedMinusY && mouseY <= speedMinusY + SPEED_BUTTON_SIZE) {
-            VoxyMapSettings.changeCameraSpeed(-0.25);
-            return true;
-        }
-        if (mouseX >= speedPlusX && mouseX <= speedPlusX + SPEED_BUTTON_SIZE
-                && mouseY >= speedPlusY && mouseY <= speedPlusY + SPEED_BUTTON_SIZE) {
-            VoxyMapSettings.changeCameraSpeed(0.25);
-            return true;
-        }
-
-        if (isInsideSettingsRow(mouseX, mouseY, pauseRowY)) {
-            VoxyMapSettings.togglePauseSingleplayer();
-        } else if (isInsideSettingsRow(mouseX, mouseY, speedRowY)) {
-            double rowMid = settingsPanelX + settingsPanelW / 2.0;
-            VoxyMapSettings.changeCameraSpeed(mouseX < rowMid ? -0.25 : 0.25);
-        }
-        return true;
-    }
-
-    private boolean isInsideSettingsRow(double mouseX, double mouseY, int rowY) {
-        return rowY >= 0
-                && mouseX >= settingsPanelX + 8 && mouseX <= settingsPanelX + settingsPanelW - 8
-                && mouseY >= rowY && mouseY <= rowY + SETTINGS_ROW_HEIGHT - 2;
-    }
-
-    private void startXaeroTransition() {
-        if (xaeroTransitionActive) return;
-        dragging = false;
-        middleDragging = false;
-        xaeroTransitionActive = true;
-        xaeroTransitionStartedAt = System.nanoTime();
-    }
-
-    private void drawXaeroTransition(GuiGraphics g) {
-        double raw = (System.nanoTime() - xaeroTransitionStartedAt) / (double) XAERO_TRANSITION_NANOS;
-        raw = Mth.clamp(raw, 0.0, 1.0);
-        double eased = 1.0 - Math.pow(1.0 - raw, 3.0);
-        int maxRadius = Math.max(width, height) + 120;
-        int radius = (int) (maxRadius * eased);
-        int originX = xaeroButtonX > 0 ? xaeroButtonX + xaeroButtonW / 2 : width - 80;
-        int originY = xaeroButtonY > 0 ? xaeroButtonY + xaeroButtonH / 2 : 24;
-
-        g.fill(0, 0, width, height, (int) (0x55000000 | ((long) (80 * eased) << 24)));
-        g.fill(originX - radius, originY - radius / 3, originX + radius, originY + radius / 3, 0xDD07111F);
-        g.fill(originX - radius / 3, originY - radius, originX + radius / 3, originY + radius, 0xAA0B3148);
-        g.drawCenteredString(minecraft.font, Component.translatable("overlay.voxymap.xaero.transition"),
-                width / 2, height / 2 + 22, 0xFFE9F2FF);
-    }
-
-    private void openXaeroWorldMap() {
-        VoxyMapGuiRenderer.close(minecraft);
-        VoxyMapCameraController.deactivate();
-        VoxyBridge.restoreEnvironmentalFogAfterMap();
-        MapRenderSettingsGuard.restoreAfterMap(minecraft);
-
-        if (XaeroWorldMapBridge.openWorldMap(minecraft)) {
-            return;
-        }
-
-        VoxyBridge.suppressEnvironmentalFogForMap();
-        MapRenderSettingsGuard.applyForMap(minecraft);
-        syncWorldCamera();
-        VoxyMapGuiRenderer.open(minecraft);
-        xaeroTransitionActive = false;
-        xaeroTransitionStartedAt = 0L;
-        if (minecraft.player != null) {
-            minecraft.player.displayClientMessage(Component.translatable("message.voxymap.xaero_open_failed"), false);
-        }
     }
 
     private void drawUnsupportedDimension(GuiGraphicsExtractor g) {
@@ -701,7 +338,7 @@ public class MapScreen extends Screen {
         int topW = Math.max(1, Math.min(width - HUD_MARGIN * 2, Math.max(minecraft.font.width(title), Math.max(minecraft.font.width(playerText), minecraft.font.width(cameraText))) + 20));
         int topH = minecraft.player != null ? 42 : 30;
         drawGlassPanel(g, topX, topY, topW, topH, 0xAA030914, 0xFF3BA4FF);
-        g.text(minecraft.font, Component.literal(title), topX + 10, topY + 5, 0xFFFFFFFF);
+        g.text(minecraft.font, title, topX + 10, topY + 5, 0xFFFFFFFF);
         if (minecraft.player != null) {
             g.text(minecraft.font, playerText, topX + 10, topY + 18, 0xFFDFF8FF);
         }
@@ -807,6 +444,26 @@ public class MapScreen extends Screen {
         return footerY;
     }
 
+    private String[][] keyHints() {
+        return new String[][] {
+                {Component.translatable("overlay.voxymap.key.drag.button").getString(), Component.translatable("overlay.voxymap.key.drag").getString()},
+                {Component.translatable("overlay.voxymap.key.rotate.button").getString(), Component.translatable("overlay.voxymap.key.rotate").getString()},
+                {Component.translatable("overlay.voxymap.key.move.button").getString(), Component.translatable("overlay.voxymap.key.move").getString()},
+                {Component.translatable("overlay.voxymap.key.fast.button").getString(), Component.translatable("overlay.voxymap.key.fast").getString()},
+                {Component.translatable("overlay.voxymap.key.zoom.button").getString(), Component.translatable("overlay.voxymap.key.zoom").getString()},
+                {Component.translatable("overlay.voxymap.key.center.button").getString(), Component.translatable("overlay.voxymap.key.center").getString()},
+                {Component.translatable("overlay.voxymap.key.close.button").getString(), Component.translatable("overlay.voxymap.key.close").getString()}
+        };
+    }
+
+    private int keyHintsWidth(String[][] hints) {
+        int width = 0;
+        for (String[] hint : hints) {
+            width += hintWidth(hint) + HUD_GAP;
+        }
+        return width - HUD_GAP;
+    }
+
     private void drawKeyHints(GuiGraphicsExtractor g, String[][] hints, int x, int y) {
         int currentX = x;
         for (String[] hint : hints) {
@@ -816,6 +473,14 @@ public class MapScreen extends Screen {
             g.text(minecraft.font, hint[1], currentX + 14 + minecraft.font.width(hint[0]), y + 7, 0xFFBFD8FF);
             currentX += w + HUD_GAP;
         }
+    }
+
+    private int hintWidth(String[] hint) {
+        return minecraft.font.width(hint[0]) + minecraft.font.width(hint[1]) + 22;
+    }
+
+    private String onOff(boolean enabled) {
+        return Component.translatable(enabled ? "screen.voxymap.settings.on" : "screen.voxymap.settings.off").getString();
     }
 
     private void drawXaeroButton(GuiGraphicsExtractor g, int mouseX, int mouseY, int slide, int topX, int topY, int topW, int topH) {
@@ -849,6 +514,71 @@ public class MapScreen extends Screen {
         g.text(minecraft.font, label, xaeroButtonX + 28, xaeroButtonY + 8, 0xFFE9F2FF);
     }
 
+    private boolean isInsideXaeroButton(double mouseX, double mouseY) {
+        return xaeroButtonW > 0
+                && mouseX >= xaeroButtonX && mouseX <= xaeroButtonX + xaeroButtonW
+                && mouseY >= xaeroButtonY && mouseY <= xaeroButtonY + xaeroButtonH;
+    }
+
+    private boolean isInsideSettingsButton(double mouseX, double mouseY) {
+        return settingsButtonW > 0
+                && mouseX >= settingsButtonX && mouseX <= settingsButtonX + settingsButtonW
+                && mouseY >= settingsButtonY && mouseY <= settingsButtonY + settingsButtonH;
+    }
+
+    private boolean isInsideSettingsPanel(double mouseX, double mouseY) {
+        return settingsOpen && settingsPanelW > 0
+                && mouseX >= settingsPanelX && mouseX <= settingsPanelX + settingsPanelW
+                && mouseY >= settingsPanelY && mouseY <= settingsPanelY + settingsPanelH;
+    }
+
+    private boolean handleSettingsClick(double mouseX, double mouseY) {
+        if (isInsideSettingsButton(mouseX, mouseY)) {
+            settingsOpen = !settingsOpen;
+            return true;
+        }
+        if (!isInsideSettingsPanel(mouseX, mouseY)) {
+            if (settingsOpen) {
+                settingsOpen = false;
+                return true;
+            }
+            return false;
+        }
+
+        if (mouseX >= speedMinusX && mouseX <= speedMinusX + SPEED_BUTTON_SIZE
+                && mouseY >= speedMinusY && mouseY <= speedMinusY + SPEED_BUTTON_SIZE) {
+            VoxyMapSettings.changeCameraSpeed(-0.25);
+            return true;
+        }
+        if (mouseX >= speedPlusX && mouseX <= speedPlusX + SPEED_BUTTON_SIZE
+                && mouseY >= speedPlusY && mouseY <= speedPlusY + SPEED_BUTTON_SIZE) {
+            VoxyMapSettings.changeCameraSpeed(0.25);
+            return true;
+        }
+
+        if (isInsideSettingsRow(mouseX, mouseY, pauseRowY)) {
+            VoxyMapSettings.togglePauseSingleplayer();
+        } else if (isInsideSettingsRow(mouseX, mouseY, speedRowY)) {
+            double rowMid = settingsPanelX + settingsPanelW / 2.0;
+            VoxyMapSettings.changeCameraSpeed(mouseX < rowMid ? -0.25 : 0.25);
+        }
+        return true;
+    }
+
+    private boolean isInsideSettingsRow(double mouseX, double mouseY, int rowY) {
+        return rowY >= 0
+                && mouseX >= settingsPanelX + 8 && mouseX <= settingsPanelX + settingsPanelW - 8
+                && mouseY >= rowY && mouseY <= rowY + SETTINGS_ROW_HEIGHT - 2;
+    }
+
+    private void startXaeroTransition() {
+        if (xaeroTransitionActive) return;
+        dragging = false;
+        middleDragging = false;
+        xaeroTransitionActive = true;
+        xaeroTransitionStartedAt = System.nanoTime();
+    }
+
     private void drawXaeroTransition(GuiGraphicsExtractor g) {
         double raw = (System.nanoTime() - xaeroTransitionStartedAt) / (double) XAERO_TRANSITION_NANOS;
         raw = Mth.clamp(raw, 0.0, 1.0);
@@ -865,6 +595,26 @@ public class MapScreen extends Screen {
                 width / 2, height / 2 + 22, 0xFFE9F2FF);
     }
 
+    private void openXaeroWorldMap() {
+        VoxyMapGuiRenderer.close(minecraft);
+        VoxyMapCameraController.deactivate();
+        VoxyBridge.restoreEnvironmentalFogAfterMap();
+        MapRenderSettingsGuard.restoreAfterMap(minecraft);
+
+        if (XaeroWorldMapBridge.openWorldMap(minecraft)) {
+            return;
+        }
+
+        VoxyBridge.suppressEnvironmentalFogForMap();
+        MapRenderSettingsGuard.applyForMap(minecraft);
+        syncWorldCamera();
+        VoxyMapGuiRenderer.open(minecraft);
+        xaeroTransitionActive = false;
+        xaeroTransitionStartedAt = 0L;
+        if (minecraft.player != null) {
+            minecraft.player.sendSystemMessage(Component.translatable("message.voxymap.xaero_open_failed"));
+        }
+    }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {

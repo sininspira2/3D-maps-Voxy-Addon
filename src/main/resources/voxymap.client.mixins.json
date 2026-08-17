@@ -7,7 +7,7 @@
     "ClientClockManagerMixin",
     "FogRendererMixin",
     "GameRendererMixin",
-    "GuiMixin",
+    "HudMixin",
     "LevelMixin",
     "LevelRendererMixin",
     "RenderPipelineFactoryMixin",

@@ -15,11 +15,11 @@ https://modrinth.com/mod/3d-maps-voxy-addon
 
 ## Requirements
 
-- Minecraft `26.1.2`
+- Minecraft `26.2`
 - Java `25`
 - Fabric Loader `0.19.3` or newer
-- Fabric API `0.154.0+26.1.2` or compatible
-- Voxy
+- Fabric API `0.157.0+26.2` or compatible
+- Voxy `0.2.18-beta` or compatible
 
 VoxyMap is a client-side addon. It does not need to be installed on the server, but server rules may still restrict minimap, world map, LOD, or waypoint mods. Check the rules before using it on public servers.
 
@@ -43,16 +43,21 @@ VoxyMap is a client-side addon. It does not need to be installed on the server, 
 ## Building From Source
 
 ```shell
-./gradlew officialRuntimeJar
+./gradlew build
 ```
 
 On Windows:
 
 ```powershell
-.\gradlew.bat officialRuntimeJar
+.\gradlew.bat build
 ```
 
-The compiled mod will be created in `build/libs`.
+The compiled mod will be created in `build/libs`. Building requires JDK 25, the same
+Java version Minecraft 26.2 runs on.
+
+Minecraft 26.2 ships deobfuscated, so the build uses Fabric Loom without mappings and
+without a remap step: the class and method names in this repository are the ones the
+game uses at runtime.
 
 ## Compatibility
 

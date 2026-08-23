@@ -4,7 +4,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 
 public final class VoxyMapCameraController {
-    private static boolean active;
+    // Read from Voxy's async node-manager thread by VoxyLoggerMixin, not just the client thread.
+    private static volatile boolean active;
     private static double cameraX;
     private static double cameraY;
     private static double cameraZ;

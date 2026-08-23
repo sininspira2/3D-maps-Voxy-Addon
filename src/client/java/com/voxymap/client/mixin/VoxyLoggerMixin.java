@@ -13,10 +13,11 @@ public abstract class VoxyLoggerMixin {
      * Flying the map camera across not-yet-loaded terrain makes Voxy's hierarchical
      * {@code NodeManager} emit bursts of "Tried processing request for pos: ... but its
      * type was a request, ignoring!" warnings — the GPU traversal re-emits LOD requests
-     * that are already in flight, and the duplicate is simply dropped. Voxy's Logger
-     * mirrors every warn/error into the chat HUD, which floods the chat while browsing
-     * the map. Only the chat mirror is cancelled here, and only while the map is open;
-     * the messages still reach the log file through slf4j.
+     * that are already in flight, and the duplicate is simply dropped. Voxy's
+     * {@code Logger.error} mirrors the message into the chat HUD, which floods the chat
+     * while browsing the map. Only the chat mirror is cancelled here, and only while the
+     * map is open; the messages still reach the log file through slf4j. This runs on
+     * Voxy's async node-manager thread, hence the volatile map-active flag.
      */
     @Inject(method = "showInHUD", at = @At("HEAD"), cancellable = true, remap = false)
     private static void voxymap$muteNodeRequestSpamOnMap(String message, CallbackInfo ci) {

@@ -3,22 +3,19 @@ package com.voxymap.client.gui;
 import com.voxymap.client.map.MapView;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 
 /**
- * Marks the player on the map: the vanilla map arrow, turned to where the player faces, on
- * a disc with a pulsing ring. When the player is off screen the marker sits on the map edge
+ * Marks the player on the map: an arrow turned to where the player faces, on a disc with a
+ * pulsing ring. When the player is off screen the marker sits on the map edge
  * with a pointer towards them and the distance from the map centre, and clicking it brings
  * the map back to the player.
  */
 final class PlayerMarker {
-    private static final Identifier ARROW = Identifier.withDefaultNamespace("textures/map/decorations/player.png");
-    private static final int ARROW_TEXTURE_SIZE = 8;
-    private static final float ARROW_SCALE = 2.0f;
-    private static final float EDGE_ARROW_SCALE = 1.5f;
+    private static final float ARROW_LENGTH = 13.0f;
+    private static final float ARROW_WIDTH = 11.0f;
+    private static final float EDGE_ARROW_SCALE = 0.75f;
     private static final float DISC_RADIUS = 9.5f;
     private static final float PULSE_MIN_RADIUS = 9.0f;
     private static final float PULSE_MAX_RADIUS = 22.0f;
@@ -27,6 +24,7 @@ final class PlayerMarker {
     private static final int CLICK_RADIUS = 12;
 
     private static final int DISC_COLOR = 0xC0030914;
+    private static final int ARROW_COLOR = 0xFFFFFFFF;
     private static final int RING_COLOR = 0xFF3BA4FF;
     private static final int PULSE_COLOR = 0x7DEBFF;
     private static final int LABEL_COLOR = 0xFFDFF8FF;
@@ -68,7 +66,7 @@ final class PlayerMarker {
             float y = (float) player.y();
             drawPulse(g, x, y, guiScale);
             drawDisc(g, x, y, DISC_RADIUS, guiScale);
-            drawArrow(g, x, y, facing, ARROW_SCALE);
+            drawArrow(g, x, y, facing, 1.0f, guiScale);
             return;
         }
 
@@ -99,7 +97,7 @@ final class PlayerMarker {
         float pointer = (float) Math.atan2(dirX, -dirY);
         drawPointer(g, x, y, pointer, guiScale);
         drawDisc(g, x, y, DISC_RADIUS, guiScale);
-        drawArrow(g, x, y, screenAngle(centre, centreAhead), EDGE_ARROW_SCALE);
+        drawArrow(g, x, y, screenAngle(centre, centreAhead), EDGE_ARROW_SCALE, guiScale);
 
         int distance = (int) Math.round(Math.hypot(groundX - centreX, groundZ - centreZ));
         String label = Component.translatable("overlay.voxymap.player_distance", distance).getString();
@@ -124,15 +122,32 @@ final class PlayerMarker {
         return (float) Math.atan2(to.x() - from.x(), -(to.y() - from.y()));
     }
 
-    private static void drawArrow(GuiGraphicsExtractor g, float x, float y, float angle, float scale) {
-        g.pose().pushMatrix();
-        g.pose().translate(x, y);
-        g.pose().rotate(angle);
-        g.pose().scale(scale, scale);
-        int half = ARROW_TEXTURE_SIZE / 2;
-        g.blit(RenderPipelines.GUI_TEXTURED, ARROW, -half, -half, 0.0f, 0.0f,
-                ARROW_TEXTURE_SIZE, ARROW_TEXTURE_SIZE, ARROW_TEXTURE_SIZE, ARROW_TEXTURE_SIZE);
-        g.pose().popMatrix();
+    /** A notched arrowhead pointing along {@code angle}, drawn row by row at screen resolution. */
+    private static void drawArrow(GuiGraphicsExtractor g, float x, float y, float angle, float scale, int guiScale) {
+        withScreenPixels(g, x, y, guiScale, () -> {
+            g.pose().rotate(angle);
+            float length = ARROW_LENGTH * scale * guiScale;
+            float halfWidth = ARROW_WIDTH * 0.5f * scale * guiScale;
+            float tipY = -length * 0.5f;
+            float baseY = length * 0.5f;
+            float notchY = baseY - length * 0.3f;
+            for (int row = Math.round(tipY); row < Math.round(baseY); row++) {
+                float centreY = row + 0.5f;
+                int outer = Math.round((centreY - tipY) / length * halfWidth);
+                if (outer <= 0) {
+                    continue;
+                }
+                if (centreY <= notchY) {
+                    g.fill(-outer, row, outer, row + 1, ARROW_COLOR);
+                } else {
+                    int inner = Math.round((centreY - notchY) / (baseY - notchY) * halfWidth);
+                    if (outer > inner) {
+                        g.fill(-outer, row, -inner, row + 1, ARROW_COLOR);
+                        g.fill(inner, row, outer, row + 1, ARROW_COLOR);
+                    }
+                }
+            }
+        });
     }
 
     private static void drawDisc(GuiGraphicsExtractor g, float x, float y, float radius, int guiScale) {

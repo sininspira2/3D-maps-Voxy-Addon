@@ -64,7 +64,9 @@ src/main/resources/         fabric.mod.json, mixin config, lang files, icon
 src/client/java/com/voxymap/client/
   VoxyMapClient.java        entrypoint; polls M each client tick
   gui/MapScreen.java        the map screen: camera control, HUD, input
+  gui/PlayerMarker.java     the player arrow on the map, or on its edge when off screen
   map/VoxyMapCameraController.java  the detached camera state the mixins read
+  map/MapView.java                  that camera as a basis: world→screen and screen→ground
   map/VoxyMapGuiRenderer.java       Iris-shaderpack fallback path (see below)
   map/VoxyBridge.java               switches Voxy's fog mode off while the map is open
   map/MapRenderSettingsGuard.java   forces clouds off while the map is open
@@ -76,6 +78,12 @@ src/client/java/com/voxymap/client/
 `VoxyMapCameraController` is the hinge: `MapScreen` writes the desired camera into it
 each frame, and `CameraMixin` applies it to the vanilla `Camera`. Everything else keys
 off `VoxyMapCameraController.isActive()`.
+
+The camera aims at a focus point on the ground (`viewCenterY` is the heightmap top under
+the player), not at a fixed height: aiming high above the terrain shifts everything on
+screen away from the player. `MapView` must build its basis exactly like vanilla
+`Camera.setRotation` (`rotationYXZ(π - yaw, -pitch, 0)`), or zoom-to-cursor and the player
+marker drift off their ground points.
 
 `VoxyMapGuiRenderer` is only used when an Iris shader pack is active — the shader
 pipeline cannot render the detached map camera in the normal world pass, so Voxy's

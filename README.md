@@ -11,6 +11,8 @@ https://modrinth.com/mod/3d-maps-voxy-addon
 - Full-screen 3D map opened with the `M` key.
 - Voxy-powered terrain data for long-range world previews.
 - Smooth map dragging, cursor-centered zoom, keyboard movement, and centering on the player.
+- A player marker that shows where you are and which way you face; when you are off screen it
+  waits at the edge of the map with your distance, and clicking it brings the map back to you.
 - Full support for English, Polish, and Russian languages.
 
 ## Requirements
@@ -37,7 +39,7 @@ VoxyMap is a client-side addon. It does not need to be installed on the server, 
 - `W/A/S/D` or `Arrow keys` - move the map camera.
 - `Shift` - move faster.
 - `Mouse wheel` - zoom toward the cursor.
-- `C` - center the map on the player.
+- `C` - center the map on the player (or click the player marker at the edge of the map).
 - `M` or `Esc` - close the map.
 
 ## Building From Source

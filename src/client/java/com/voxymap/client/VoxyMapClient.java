@@ -24,7 +24,10 @@ public class VoxyMapClient implements ClientModInitializer {
             if (pressed && !openMapPressed && client.gui.screen() == null) {
                 client.gui.setScreen(new MapScreen());
             }
-            openMapPressed = pressed;
+            // M also closes the map, and that press is still down on the next tick, when no
+            // screen is open any more. Count M as held while the map is open so it has to be
+            // released before it can reopen the map.
+            openMapPressed = pressed || client.gui.screen() instanceof MapScreen;
         });
 
         LOGGER.info("[VoxyMap] Loaded. Press M to open the map.");

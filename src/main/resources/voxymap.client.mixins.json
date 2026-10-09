@@ -4,15 +4,16 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "CameraMixin",
-    "ClientClockManagerMixin",
+    "ClientClockInstanceMixin",
+    "CloudRendererMixin",
     "FogRendererMixin",
     "GameRendererMixin",
     "HudMixin",
     "LevelMixin",
-    "LevelRendererMixin",
     "RenderPipelineFactoryMixin",
     "VoxyLoggerMixin",
     "VoxyRenderSystemMixin",
+    "WeatherEffectRendererMixin",
     "XaeroGuiMapMixin"
   ],
   "injectors": {

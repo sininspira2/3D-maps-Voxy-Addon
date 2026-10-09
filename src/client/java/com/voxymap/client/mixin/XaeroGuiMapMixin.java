@@ -1,10 +1,10 @@
 package com.voxymap.client.mixin;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.voxymap.client.integration.VoxyMapReturnOverlay;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.MouseButtonEvent;
-import org.lwjgl.glfw.GLFW;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
@@ -23,7 +23,7 @@ public abstract class XaeroGuiMapMixin {
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void voxymap$clickReturnButton(MouseButtonEvent event, boolean isInside, CallbackInfoReturnable<Boolean> cir) {
         int width = Minecraft.getInstance().getWindow().getGuiScaledWidth();
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_1 && VoxyMapReturnOverlay.click(width, event.x(), event.y())) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && VoxyMapReturnOverlay.click(width, event.x(), event.y())) {
             cir.setReturnValue(true);
         }
     }

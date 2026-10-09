@@ -1,5 +1,6 @@
 package com.voxymap.client.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
@@ -13,7 +14,7 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLScancode;
 
 public class MapScreen extends Screen {
 
@@ -149,11 +150,10 @@ public class MapScreen extends Screen {
         double dt = lastFrameNanos == 0L ? 1.0 / 60.0 : Math.min(0.08, (now - lastFrameNanos) / 1_000_000_000.0);
         lastFrameNanos = now;
 
-        long window = minecraft.getWindow().handle();
-        double forwardInput = keyDown(window, GLFW.GLFW_KEY_W) || keyDown(window, GLFW.GLFW_KEY_UP) ? 1.0 : 0.0;
-        forwardInput -= keyDown(window, GLFW.GLFW_KEY_S) || keyDown(window, GLFW.GLFW_KEY_DOWN) ? 1.0 : 0.0;
-        double strafeInput = keyDown(window, GLFW.GLFW_KEY_A) || keyDown(window, GLFW.GLFW_KEY_LEFT) ? 1.0 : 0.0;
-        strafeInput -= keyDown(window, GLFW.GLFW_KEY_D) || keyDown(window, GLFW.GLFW_KEY_RIGHT) ? 1.0 : 0.0;
+        double forwardInput = keyDown(InputConstants.KEY_W) || keyDown(InputConstants.KEY_UP) ? 1.0 : 0.0;
+        forwardInput -= keyDown(InputConstants.KEY_S) || keyDown(InputConstants.KEY_DOWN) ? 1.0 : 0.0;
+        double strafeInput = keyDown(InputConstants.KEY_A) || keyDown(InputConstants.KEY_LEFT) ? 1.0 : 0.0;
+        strafeInput -= keyDown(InputConstants.KEY_D) || keyDown(InputConstants.KEY_RIGHT) ? 1.0 : 0.0;
 
         double horizontalInput = Math.hypot(forwardInput, strafeInput);
         if (horizontalInput > 1.0) {
@@ -161,7 +161,7 @@ public class MapScreen extends Screen {
             strafeInput /= horizontalInput;
         }
 
-        double speedBoost = keyDown(window, GLFW.GLFW_KEY_LEFT_SHIFT) || keyDown(window, GLFW.GLFW_KEY_RIGHT_SHIFT) ? 2.5 : 1.0;
+        double speedBoost = keyDown(InputConstants.KEY_LSHIFT) || keyDown(InputConstants.KEY_RSHIFT) ? 2.5 : 1.0;
         double moveSpeed = Math.max(12.0, blocksPerPixel * 76.0) * speedBoost * VoxyMapSettings.cameraSpeedMultiplier();
         moveSpeed = Math.min(moveSpeed, MAX_KEYBOARD_CAMERA_SPEED * speedBoost);
         double forwardX = -Math.sin(viewYaw);
@@ -181,8 +181,8 @@ public class MapScreen extends Screen {
         }
     }
 
-    private static boolean keyDown(long window, int key) {
-        return GLFW.glfwGetKey(window, key) == GLFW.GLFW_PRESS;
+    private static boolean keyDown(int scancode) {
+        return InputConstants.isKeyDown(scancode);
     }
 
     private GroundPoint mapPointAt(double mouseX, double mouseY) {
@@ -643,14 +643,14 @@ public class MapScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean isInside) {
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_1 && handleSettingsClick(event.x(), event.y())) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && handleSettingsClick(event.x(), event.y())) {
             return true;
         }
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_1 && isInsideXaeroButton(event.x(), event.y())) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && isInsideXaeroButton(event.x(), event.y())) {
             startXaeroTransition();
             return true;
         }
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_1) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             dragging = true;
             middleDragging = false;
             dragLastMouseX = event.x();
@@ -659,7 +659,7 @@ public class MapScreen extends Screen {
             moveVelocityZ = 0.0;
             return true;
         }
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_MIDDLE) {
             middleDragging = true;
             dragging = false;
             dragStartMouseX = event.x();
@@ -671,11 +671,11 @@ public class MapScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_1) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             dragging = false;
             return true;
         }
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_MIDDLE) {
             middleDragging = false;
             return true;
         }
@@ -702,28 +702,28 @@ public class MapScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int keyCode = event.key();
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE || keyCode == GLFW.GLFW_KEY_M) {
+        if (keyCode == InputConstants.KEY_ESCAPE || keyCode == InputConstants.KEY_M) {
             onClose();
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_W || keyCode == GLFW.GLFW_KEY_S ||
-                keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_D ||
-                keyCode == GLFW.GLFW_KEY_UP || keyCode == GLFW.GLFW_KEY_DOWN ||
-                keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_RIGHT) {
+        if (keyCode == InputConstants.KEY_W || keyCode == InputConstants.KEY_S ||
+                keyCode == InputConstants.KEY_A || keyCode == InputConstants.KEY_D ||
+                keyCode == InputConstants.KEY_UP || keyCode == InputConstants.KEY_DOWN ||
+                keyCode == InputConstants.KEY_LEFT || keyCode == InputConstants.KEY_RIGHT) {
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_C && minecraft.player != null) {
+        if (keyCode == InputConstants.KEY_C && minecraft.player != null) {
             viewCenterX = minecraft.player.getX();
             viewCenterY = MAP_VIEW_LEVEL;
             viewCenterZ = minecraft.player.getZ();
             syncWorldCamera();
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_EQUAL || keyCode == GLFW.GLFW_KEY_KP_ADD) {
+        if (keyCode == InputConstants.KEY_EQUALS || keyCode == InputConstants.KEY_ADD) {
             zoomAt(lastZoomMouseX(), lastZoomMouseY(), 0.8);
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_MINUS || keyCode == GLFW.GLFW_KEY_KP_SUBTRACT) {
+        if (keyCode == InputConstants.KEY_MINUS || keyCode == SDLScancode.SDL_SCANCODE_KP_MINUS) {
             zoomAt(lastZoomMouseX(), lastZoomMouseY(), 1.25);
             return true;
         }

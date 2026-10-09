@@ -1,32 +1,34 @@
 package com.voxymap.client.map;
 
 import me.cortex.voxy.client.config.VoxyConfig;
+import me.cortex.voxy.client.core.NormalRenderPipeline;
 
 public class VoxyBridge {
 
-    private static Boolean previousEnvironmentalFog = null;
+    private static NormalRenderPipeline.FogMode previousFogMode = null;
 
     public static void suppressEnvironmentalFogForMap() {
-        setEnvironmentalFog(false, true);
+        // OFF drops both Voxy's own fog and the vanilla environmental fog over LODs.
+        setFogMode(NormalRenderPipeline.FogMode.OFF, true);
     }
 
     public static void restoreEnvironmentalFogAfterMap() {
-        if (previousEnvironmentalFog == null) return;
-        setEnvironmentalFog(previousEnvironmentalFog, false);
-        previousEnvironmentalFog = null;
+        if (previousFogMode == null) return;
+        setFogMode(previousFogMode, false);
+        previousFogMode = null;
     }
 
-    private static void setEnvironmentalFog(boolean value, boolean rememberPrevious) {
+    private static void setFogMode(NormalRenderPipeline.FogMode value, boolean rememberPrevious) {
         try {
             var config = VoxyConfig.CONFIG;
-            boolean current = config.useEnvironmentalFog;
-            if (rememberPrevious && previousEnvironmentalFog == null) {
-                previousEnvironmentalFog = current;
+            NormalRenderPipeline.FogMode current = config.getFogMode();
+            if (rememberPrevious && previousFogMode == null) {
+                previousFogMode = current;
             }
             if (current == value) {
                 return;
             }
-            config.useEnvironmentalFog = value;
+            config.setFogMode(value);
         } catch (Throwable ignored) {
         }
     }

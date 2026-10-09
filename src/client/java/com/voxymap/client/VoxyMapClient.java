@@ -1,10 +1,10 @@
 package com.voxymap.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.voxymap.client.gui.MapScreen;
 import com.voxymap.client.map.VoxyMapSettings;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,8 +20,7 @@ public class VoxyMapClient implements ClientModInitializer {
         VoxyMapSettings.load();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            long window = client.getWindow().handle();
-            boolean pressed = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_M) == GLFW.GLFW_PRESS;
+            boolean pressed = InputConstants.isKeyDown(InputConstants.KEY_M);
             if (pressed && !openMapPressed && client.gui.screen() == null) {
                 client.gui.setScreen(new MapScreen());
             }

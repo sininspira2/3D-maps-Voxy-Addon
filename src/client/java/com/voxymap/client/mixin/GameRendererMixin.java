@@ -1,12 +1,12 @@
 package com.voxymap.client.mixin;
 
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyMapGuiRenderer;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4fc;
+import net.minecraft.client.renderer.state.level.PlayerRenderState;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -25,12 +25,12 @@ public abstract class GameRendererMixin {
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/render/GuiRenderer;render()V", shift = At.Shift.BEFORE),
             remap = false
     )
-    private void voxymap$renderGuiMapBeforeHud(DeltaTracker deltaTracker, boolean renderLevel, CallbackInfo ci) {
+    private void voxymap$renderGuiMapBeforeHud(CallbackInfo ci) {
         VoxyMapGuiRenderer.render(minecraft);
     }
 
-    @Inject(method = "renderItemInHand(Lnet/minecraft/client/renderer/state/level/CameraRenderState;FLorg/joml/Matrix4fc;)V", at = @At("HEAD"), cancellable = true, remap = false)
-    private void voxymap$hideHandInMap(CameraRenderState cameraRenderState, float tickDelta, Matrix4fc projectionMatrix, CallbackInfo ci) {
+    @Inject(method = "renderItemInHand(Lnet/minecraft/client/renderer/state/level/CameraRenderState;Lnet/minecraft/client/renderer/state/level/PlayerRenderState;Lcom/mojang/renderpearl/api/textures/GpuTextureView;)V", at = @At("HEAD"), cancellable = true, remap = false)
+    private void voxymap$hideHandInMap(CameraRenderState cameraRenderState, PlayerRenderState playerRenderState, GpuTextureView colorTarget, CallbackInfo ci) {
         if (VoxyMapCameraController.isActive()) {
             ci.cancel();
         }

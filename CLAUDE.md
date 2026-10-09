@@ -17,18 +17,24 @@ world render — fed by Voxy — becomes the map.
 
 | Thing | Version |
 | --- | --- |
-| Minecraft | `26.2` |
-| Java | **25** (JDK 25 required to build; MC 26.2 runs on Java 25) |
-| Fabric Loader | `0.19.3` |
-| Fabric API | `0.157.0+26.2` |
-| Loom | `1.17.19` (plugin id `net.fabricmc.fabric-loom`) |
-| Gradle | `9.7.0` (Loom 1.17 needs ≥ 9.5) |
-| Voxy | `0.2.18-beta` (compile-only) |
-| Iris | `1.11.2+26.2-fabric` (compile-only) |
-| Xaero's World Map | `1.44.2` (compile-only) |
+| Minecraft | `26.3` |
+| Java | **25** (JDK 25 required to build *and* to run Gradle; MC 26.3 runs on Java 25) |
+| Fabric Loader | `0.19.5` |
+| Fabric API | `0.162.0+26.3` |
+| Loom | `1.18.3` (plugin id `net.fabricmc.fabric-loom`) |
+| Gradle | `9.8.1` (Loom 1.18 needs ≥ 9.7 running on Java 25) |
+| Voxy | `0.2.20-beta`, `263` branch (compile-only, local jar — see below) |
+| Iris | `1.11.7+26.3-fabric` (compile-only) |
+| Xaero's World Map | `1.47.0` (compile-only) |
 
 All versions live in `gradle.properties`; `build.gradle` reads them from there. Bump
 them in one place.
+
+Voxy for 26.3 is not on Modrinth yet. If any `libs/voxy-*.jar` exists it is used instead
+of `maven.modrinth:voxy:${voxy_version}`; drop a build of Voxy's
+[`263` branch](https://github.com/MCRcortex/voxy/tree/263) there. `*.jar` is git-ignored
+and Voxy is All-Rights-Reserved, so the jar is never committed. Once Voxy publishes a
+26.3 build, delete `libs/` and the Modrinth artifact is picked up again.
 
 ```shell
 ./gradlew build          # produces build/libs/VoxyMap-<version>.jar
@@ -60,7 +66,7 @@ src/client/java/com/voxymap/client/
   gui/MapScreen.java        the map screen: camera control, HUD, input
   map/VoxyMapCameraController.java  the detached camera state the mixins read
   map/VoxyMapGuiRenderer.java       Iris-shaderpack fallback path (see below)
-  map/VoxyBridge.java               toggles Voxy's environmental fog
+  map/VoxyBridge.java               switches Voxy's fog mode off while the map is open
   map/MapRenderSettingsGuard.java   forces clouds off while the map is open
   map/VoxyMapSettings.java          config/voxymap.properties
   integration/              Xaero's World Map bridge + its return button
@@ -78,7 +84,36 @@ the GUI draws.
 
 ## Porting notes / API landmines
 
-Things that moved recently. Check these first when a new Minecraft version breaks the build:
+Things that moved recently. Check these first when a new Minecraft version breaks the build.
+
+Minecraft 26.3:
+
+- **GLFW is gone; windowing and input are SDL3** (`org.lwjgl.sdl`). There is no
+  `org.lwjgl.glfw` on the classpath. Use `com.mojang.blaze3d.platform.InputConstants`:
+  `InputConstants.isKeyDown(scancode)` (no window argument) replaces `glfwGetKey`.
+  Key constants are now **SDL scancodes** (`KEY_A = 4`, `KEY_ESCAPE = 41`) and
+  `KeyEvent.key()` carries the scancode. Mouse buttons are SDL numbers:
+  `MOUSE_BUTTON_LEFT = 1`, `MOUSE_BUTTON_MIDDLE = 2` (GLFW's left was 0). Keys
+  `InputConstants` lacks (e.g. keypad minus) come from `org.lwjgl.sdl.SDLScancode`.
+- **The GPU API moved to `com.mojang.renderpearl`** (OpenGL and Vulkan backends):
+  `com.mojang.blaze3d.buffers.*` → `com.mojang.renderpearl.api.buffers.*`,
+  `com.mojang.blaze3d.textures.*` → `com.mojang.renderpearl.api.textures.*`,
+  `com.mojang.blaze3d.systems.CommandEncoder` → `com.mojang.renderpearl.api.commands.CommandEncoder`,
+  `com.mojang.blaze3d.opengl.GlTextureView` → `com.mojang.renderpearl.backend.opengl.GlTextureView`.
+  `RenderSystem` and `RenderTarget` stay in `com.mojang.blaze3d`. Voxy rejects the Vulkan
+  backend, so the GL texture views are always there when Voxy is.
+- `LevelRenderer.addCloudsPass` / `addWeatherPass` are gone. Clouds and weather are drawn
+  from the translucent stage through `CloudRenderer.render`/`renderOit` and
+  `WeatherEffectRenderer.render`/`renderOit` (classic vs. order-independent transparency).
+  Both classes have a private `render` overload, so give the public one a full descriptor.
+- `GameRenderer.render(DeltaTracker, boolean)` → `render()`;
+  `renderItemInHand(CameraRenderState, float, Matrix4fc)` →
+  `renderItemInHand(CameraRenderState, PlayerRenderState, GpuTextureView)`.
+- `ClientClockManager.getTotalTicks(Holder)` is gone; `ClockManager.getInstance(holder)`
+  returns a `ClockInstance` and every reader calls `totalTicks()` on it
+  (`ClientClockManager$ClientClockInstance` on the client).
+
+Minecraft 26.2:
 
 - `GuiGraphics` **no longer exists**; it is `net.minecraft.client.gui.GuiGraphicsExtractor`.
   `drawString` → `text`, `drawCenteredString` → `centeredText`.
@@ -94,6 +129,13 @@ Things that moved recently. Check these first when a new Minecraft version break
 - Input arrives as records: `mouseClicked(MouseButtonEvent, boolean)`, `keyPressed(KeyEvent)`.
 - **The depth buffer is reversed**: clear depth to `0.0`, not `1.0`. Vanilla clears via
   `RenderSystem.getDevice().createCommandEncoder().clearColorAndDepthTextures(...)`.
+
+Voxy 0.2.20-beta (`263` branch) specifics:
+
+- `VoxyConfig.useEnvironmentalFog` is gone; it is `getFogMode()` / `setFogMode(...)` with
+  `NormalRenderPipeline.FogMode` (`FOG_AND_FADE`, `FOG`, `FADE`, `OFF`). `OFF` is the old
+  `useEnvironmentalFog = false`. Voxy reads `removesVanillaEnvFog` every frame but bakes
+  `hasFog`/`hasFade` into the pipeline when it is created.
 
 Voxy 0.2.18-beta specifics:
 

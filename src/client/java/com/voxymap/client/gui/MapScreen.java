@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
+import com.voxymap.client.map.MapView;
 import com.voxymap.client.map.VoxyBridge;
 import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyMapGuiRenderer;
@@ -12,8 +13,13 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.SectionPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.Vec3;
 import org.lwjgl.sdl.SDLScancode;
 
 public class MapScreen extends Screen {
@@ -22,7 +28,8 @@ public class MapScreen extends Screen {
 
     private static final long OPEN_ANIMATION_NANOS = 850_000_000L;
     private static final long XAERO_TRANSITION_NANOS = 380_000_000L;
-    private static final double MAP_VIEW_LEVEL = 320.0;
+    /** Focus height when there is no loaded ground to aim at. */
+    private static final double FALLBACK_FOCUS_LEVEL = 64.0;
     private static final double MAX_KEYBOARD_CAMERA_SPEED = 640.0;
     private static final double MAX_DRAG_STEP_BLOCKS = 1536.0;
     private double viewCenterX;
@@ -66,6 +73,7 @@ public class MapScreen extends Screen {
     private int speedPlusY = -1;
     private int pauseRowY = -1;
     private int speedRowY = -1;
+    private final PlayerMarker playerMarker = new PlayerMarker();
     private static final int SETTINGS_ROW_HEIGHT = 24;
     private static final int SPEED_BUTTON_SIZE = 18;
     private static final int HUD_MARGIN = 12;
@@ -84,11 +92,8 @@ public class MapScreen extends Screen {
         super.init();
         openedAtNanos = System.nanoTime();
         lastFrameNanos = 0L;
-        viewCenterY = MAP_VIEW_LEVEL;
-        if (minecraft.player != null) {
-            viewCenterX = minecraft.player.getX();
-            viewCenterZ = minecraft.player.getZ();
-        }
+        viewCenterY = FALLBACK_FOCUS_LEVEL;
+        moveFocusToPlayer();
         if (!isUnsupportedDimension()) {
             VoxyBridge.suppressEnvironmentalFogForMap();
             MapRenderSettingsGuard.applyForMap(minecraft);
@@ -116,10 +121,13 @@ public class MapScreen extends Screen {
             return;
         }
 
+        // The world on screen was rendered with the camera as it was before this frame's input.
+        MapView renderedView = captureView();
         updateSmoothControls();
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
         syncWorldCamera();
+        drawPlayerMarker(g, renderedView, delta);
         drawWorldViewerOverlay(g, mouseX, mouseY);
         drawOpeningAnimation(g);
         if (xaeroTransitionActive) {
@@ -185,52 +193,73 @@ public class MapScreen extends Screen {
         return InputConstants.isKeyDown(scancode);
     }
 
-    private GroundPoint mapPointAt(double mouseX, double mouseY) {
-        if (width <= 0 || height <= 0 || !VoxyMapCameraController.isActive()) {
-            return null;
-        }
-
-        double cameraX = VoxyMapCameraController.cameraX();
-        double cameraY = VoxyMapCameraController.cameraY();
-        double cameraZ = VoxyMapCameraController.cameraZ();
-        double pitch = Math.toRadians(VoxyMapCameraController.cameraPitch());
-        double planeY = viewCenterY;
-
-        double forwardX = -Math.sin(viewYaw) * Math.cos(pitch);
-        double forwardY = -Math.sin(pitch);
-        double forwardZ = Math.cos(viewYaw) * Math.cos(pitch);
-        double rightX = Math.cos(viewYaw);
-        double rightZ = Math.sin(viewYaw);
-        double upX = Math.sin(viewYaw) * Math.sin(pitch);
-        double upY = Math.cos(pitch);
-        double upZ = -Math.cos(viewYaw) * Math.sin(pitch);
-
-        double tanY = Math.tan(Math.toRadians(VoxyMapCameraController.fov()) * 0.5);
-        double tanX = tanY * width / (double) height;
-        double ndcX = 1.0 - mouseX / width * 2.0;
-        double ndcY = 1.0 - mouseY / height * 2.0;
-        double rayX = forwardX + rightX * ndcX * tanX + upX * ndcY * tanY;
-        double rayY = forwardY + upY * ndcY * tanY;
-        double rayZ = forwardZ + rightZ * ndcX * tanX + upZ * ndcY * tanY;
-
-        if (Math.abs(rayY) < 1.0E-6) {
-            return null;
-        }
-
-        double t = (planeY - cameraY) / rayY;
-        if (t <= 0.0 || !Double.isFinite(t)) {
-            return null;
-        }
-        return new GroundPoint(cameraX + rayX * t, cameraZ + rayZ * t);
+    private MapView.GroundPoint mapPointAt(double mouseX, double mouseY) {
+        MapView view = captureView();
+        return view == null ? null : view.groundPointAt(mouseX, mouseY, viewCenterY);
     }
 
-    private void keepMapPointUnderMouse(GroundPoint anchor, double mouseX, double mouseY) {
-        GroundPoint current = mapPointAt(mouseX, mouseY);
+    private MapView captureView() {
+        var window = minecraft.getWindow();
+        double aspectRatio = window.getHeight() > 0 ? window.getWidth() / (double) window.getHeight() : 1.0;
+        return MapView.capture(width, height, aspectRatio);
+    }
+
+    private void keepMapPointUnderMouse(MapView.GroundPoint anchor, double mouseX, double mouseY) {
+        MapView.GroundPoint current = mapPointAt(mouseX, mouseY);
         if (anchor == null || current == null) {
             return;
         }
-        viewCenterX += anchor.x - current.x;
-        viewCenterZ += anchor.z - current.z;
+        viewCenterX += anchor.x() - current.x();
+        viewCenterZ += anchor.z() - current.z();
+    }
+
+    /**
+     * Puts the map focus on the ground under the player. The camera aims at a point on the
+     * ground; aiming at a fixed height far above the terrain pushed what is on screen away
+     * from the player and left the top of a zoomed-in map empty.
+     */
+    private void moveFocusToPlayer() {
+        LocalPlayer player = minecraft.player;
+        if (player == null) {
+            return;
+        }
+        viewCenterX = player.getX();
+        viewCenterY = groundHeightAt(player.getX(), player.getZ(), player.getY());
+        viewCenterZ = player.getZ();
+    }
+
+    private void centerOnPlayer() {
+        moveFocusToPlayer();
+        moveVelocityX = 0.0;
+        moveVelocityZ = 0.0;
+        syncWorldCamera();
+    }
+
+    /** The top of the terrain at a column, or {@code fallback} when that column is not loaded. */
+    private double groundHeightAt(double x, double z, double fallback) {
+        ClientLevel level = minecraft.level;
+        int blockX = Mth.floor(x);
+        int blockZ = Mth.floor(z);
+        if (level == null || !level.hasChunk(SectionPos.blockToSectionCoord(blockX), SectionPos.blockToSectionCoord(blockZ))) {
+            return fallback;
+        }
+        int height = level.getHeight(Heightmap.Types.MOTION_BLOCKING, blockX, blockZ);
+        return height > level.getMinY() ? height : fallback;
+    }
+
+    private void drawPlayerMarker(GuiGraphicsExtractor g, MapView view, float partialTick) {
+        LocalPlayer player = minecraft.player;
+        if (player == null) {
+            return;
+        }
+        Vec3 position = player.getPosition(partialTick);
+        double groundY = groundHeightAt(position.x, position.z, position.y);
+        // Keep the off-screen marker clear of the info panel (42 tall with a player) and the key hints.
+        int safeTop = HUD_MARGIN + 42 + HUD_GAP + 14;
+        int safeBottom = height - HUD_MARGIN - KEY_HINT_HEIGHT - HUD_GAP - 14;
+        playerMarker.draw(g, minecraft, view, position.x, groundY, position.z, player.getViewYRot(partialTick),
+                viewCenterX, viewCenterY, viewCenterZ, Math.max(1.0, blocksPerPixel * 16.0),
+                HUD_MARGIN + 14, safeTop, width - HUD_MARGIN - 14, Math.max(safeTop, safeBottom));
     }
 
     private void panByPixels(double deltaX, double deltaY) {
@@ -634,7 +663,7 @@ public class MapScreen extends Screen {
         }
 
         syncWorldCamera();
-        GroundPoint anchor = mapPointAt(mouseX, mouseY);
+        MapView.GroundPoint anchor = mapPointAt(mouseX, mouseY);
         blocksPerPixel = newBlocksPerPixel;
         syncWorldCamera();
         keepMapPointUnderMouse(anchor, mouseX, mouseY);
@@ -648,6 +677,10 @@ public class MapScreen extends Screen {
         }
         if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && isInsideXaeroButton(event.x(), event.y())) {
             startXaeroTransition();
+            return true;
+        }
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && playerMarker.edgeMarkerContains(event.x(), event.y())) {
+            centerOnPlayer();
             return true;
         }
         if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
@@ -713,10 +746,7 @@ public class MapScreen extends Screen {
             return true;
         }
         if (keyCode == InputConstants.KEY_C && minecraft.player != null) {
-            viewCenterX = minecraft.player.getX();
-            viewCenterY = MAP_VIEW_LEVEL;
-            viewCenterZ = minecraft.player.getZ();
-            syncWorldCamera();
+            centerOnPlayer();
             return true;
         }
         if (keyCode == InputConstants.KEY_EQUALS || keyCode == InputConstants.KEY_ADD) {
@@ -774,8 +804,5 @@ public class MapScreen extends Screen {
     @Override
     public boolean isInGameUi() {
         return true;
-    }
-
-    private record GroundPoint(double x, double z) {
     }
 }

@@ -68,7 +68,7 @@ src/client/java/com/voxymap/client/
   map/VoxyMapCameraController.java  the detached camera state the mixins read
   map/MapView.java                  that camera as a basis: world→screen and screen→ground
   map/VoxyMapGuiRenderer.java       Iris-shaderpack fallback path (see below)
-  map/VoxyBridge.java               switches Voxy's fog mode off while the map is open
+  map/VoxyBridge.java               Voxy fog mode and render distance while the map is open
   map/MapRenderSettingsGuard.java   forces clouds off while the map is open
   map/VoxyMapSettings.java          config/voxymap.properties
   integration/              Xaero's World Map bridge + its return button
@@ -84,6 +84,15 @@ the player), not at a fixed height: aiming high above the terrain shifts everyth
 screen away from the player. `MapView` must build its basis exactly like vanilla
 `Camera.setRotation` (`rotationYXZ(π - yaw, -pitch, 0)`), or zoom-to-cursor and the player
 marker drift off their ground points.
+
+Zooming in narrows the lens with the camera held at a fixed distance; zooming out backs the
+camera away and tilts it towards straight down (`VoxyMapCameraController`), up to
+`MAX_BLOCKS_PER_PIXEL`. Voxy only draws within its render distance of the **camera**,
+measured across the ground (`RenderDistanceTracker` plus the circle test in
+`traversal_dev.comp`), so while the map is open `VoxyBridge` raises
+`VoxyConfig.sectionRenderDistance` to cover the screen (`MapView.groundReach`) and puts the
+user's value back on close. Voxy settings are restored *before* `VoxyMapGuiRenderer.close`,
+because under Iris that rebuilds Voxy's renderer and the new pipeline reads them.
 
 `VoxyMapGuiRenderer` is only used when an Iris shader pack is active — the shader
 pipeline cannot render the detached map camera in the normal world pass, so Voxy's

@@ -73,6 +73,24 @@ public record MapView(double cameraX, double cameraY, double cameraZ,
         return new GroundPoint(cameraX + rayX * t, cameraZ + rayZ * t);
     }
 
+    /**
+     * How far across the ground, from the camera, the screen reaches on the plane
+     * {@code y = planeY}: the furthest of the four corners, or infinity when one of them looks
+     * above the horizon. The ground the screen covers is a quadrilateral, so a corner is
+     * always its furthest point.
+     */
+    public double groundReach(double planeY) {
+        double reach = 0.0;
+        for (int corner = 0; corner < 4; corner++) {
+            GroundPoint point = groundPointAt((corner & 1) * guiWidth, (corner >> 1) * guiHeight, planeY);
+            if (point == null) {
+                return Double.POSITIVE_INFINITY;
+            }
+            reach = Math.max(reach, Math.hypot(point.x() - cameraX, point.z() - cameraZ));
+        }
+        return reach;
+    }
+
     public record ScreenPoint(double x, double y, boolean inFront) {
     }
 

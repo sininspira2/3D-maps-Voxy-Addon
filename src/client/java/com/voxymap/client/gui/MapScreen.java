@@ -292,6 +292,10 @@ public class MapScreen extends Screen {
     private void syncWorldCamera() {
         if (!isUnsupportedDimension()) {
             VoxyMapCameraController.update(minecraft, viewCenterX, viewCenterY, viewCenterZ, viewYaw, viewPitch, blocksPerPixel);
+            MapView view = captureView();
+            if (view != null) {
+                VoxyBridge.coverRenderDistanceForMap(view.groundReach(viewCenterY));
+            }
         } else {
             VoxyMapCameraController.deactivate();
         }
@@ -625,9 +629,9 @@ public class MapScreen extends Screen {
     }
 
     private void openXaeroWorldMap() {
+        restoreVoxySettings();
         VoxyMapGuiRenderer.close(minecraft);
         VoxyMapCameraController.deactivate();
-        VoxyBridge.restoreEnvironmentalFogAfterMap();
         MapRenderSettingsGuard.restoreAfterMap(minecraft);
 
         if (XaeroWorldMapBridge.openWorldMap(minecraft)) {
@@ -657,7 +661,7 @@ public class MapScreen extends Screen {
 
     private void zoomAt(double mouseX, double mouseY, double factor) {
         double oldBlocksPerPixel = blocksPerPixel;
-        double newBlocksPerPixel = Mth.clamp(oldBlocksPerPixel * factor, 0.125, 256.0);
+        double newBlocksPerPixel = Mth.clamp(oldBlocksPerPixel * factor, 0.125, VoxyMapCameraController.MAX_BLOCKS_PER_PIXEL);
         if (newBlocksPerPixel == oldBlocksPerPixel) {
             return;
         }
@@ -785,10 +789,16 @@ public class MapScreen extends Screen {
     }
 
     private void closeMapView() {
+        restoreVoxySettings();
         VoxyMapGuiRenderer.close(minecraft);
         VoxyMapCameraController.deactivate();
-        VoxyBridge.restoreEnvironmentalFogAfterMap();
         MapRenderSettingsGuard.restoreAfterMap(minecraft);
+    }
+
+    /** Before {@link VoxyMapGuiRenderer#close}: under Iris it rebuilds Voxy's renderer, which reads these settings. */
+    private static void restoreVoxySettings() {
+        VoxyBridge.restoreEnvironmentalFogAfterMap();
+        VoxyBridge.restoreRenderDistanceAfterMap();
     }
 
     @Override

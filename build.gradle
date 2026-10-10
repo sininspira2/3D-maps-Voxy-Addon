@@ -32,7 +32,11 @@ loom {
 	}
 }
 
-// Minecraft 26.2 ships deobfuscated, so Loom is used without mappings and
+// A locally built Voxy jar (libs/voxy-*.jar) wins over the Modrinth artifact, for
+// Voxy builds that are not published yet.
+def localVoxyJars = fileTree("libs") { include "voxy-*.jar" }
+
+// Minecraft 26.x ships deobfuscated, so Loom is used without mappings and
 // without remapping: the names we compile against are the names at runtime.
 dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -40,7 +44,11 @@ dependencies {
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
 	// Optional integrations, present at compile time only.
-	clientCompileOnly "maven.modrinth:voxy:${project.voxy_version}"
+	if (localVoxyJars.isEmpty()) {
+		clientCompileOnly "maven.modrinth:voxy:${project.voxy_version}"
+	} else {
+		clientCompileOnly localVoxyJars
+	}
 	clientCompileOnly "maven.modrinth:iris:${project.iris_version}"
 	clientCompileOnly "xaero.map:xaeroworldmap-fabric-${project.minecraft_version}:${project.xaero_worldmap_version}"
 }

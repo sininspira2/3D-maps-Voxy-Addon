@@ -1,8 +1,10 @@
 package com.voxymap.client.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.voxymap.client.VoxyMapClient;
 import com.voxymap.client.integration.XaeroWorldMapBridge;
 import com.voxymap.client.map.MapRenderSettingsGuard;
+import com.voxymap.client.map.MapView;
 import com.voxymap.client.map.VoxyBridge;
 import com.voxymap.client.map.VoxyMapCameraController;
 import com.voxymap.client.map.VoxyMapGuiRenderer;
@@ -11,9 +13,14 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.SectionPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.Vec3;
+import org.lwjgl.sdl.SDLScancode;
 
 public class MapScreen extends Screen {
 
@@ -21,7 +28,8 @@ public class MapScreen extends Screen {
 
     private static final long OPEN_ANIMATION_NANOS = 850_000_000L;
     private static final long XAERO_TRANSITION_NANOS = 380_000_000L;
-    private static final double MAP_VIEW_LEVEL = 320.0;
+    /** Focus height when there is no loaded ground to aim at. */
+    private static final double FALLBACK_FOCUS_LEVEL = 64.0;
     private static final double MAX_KEYBOARD_CAMERA_SPEED = 640.0;
     private static final double MAX_DRAG_STEP_BLOCKS = 1536.0;
     private double viewCenterX;
@@ -65,6 +73,7 @@ public class MapScreen extends Screen {
     private int speedPlusY = -1;
     private int pauseRowY = -1;
     private int speedRowY = -1;
+    private final PlayerMarker playerMarker = new PlayerMarker();
     private static final int SETTINGS_ROW_HEIGHT = 24;
     private static final int SPEED_BUTTON_SIZE = 18;
     private static final int HUD_MARGIN = 12;
@@ -83,11 +92,8 @@ public class MapScreen extends Screen {
         super.init();
         openedAtNanos = System.nanoTime();
         lastFrameNanos = 0L;
-        viewCenterY = MAP_VIEW_LEVEL;
-        if (minecraft.player != null) {
-            viewCenterX = minecraft.player.getX();
-            viewCenterZ = minecraft.player.getZ();
-        }
+        viewCenterY = FALLBACK_FOCUS_LEVEL;
+        moveFocusToPlayer();
         if (!isUnsupportedDimension()) {
             VoxyBridge.suppressEnvironmentalFogForMap();
             MapRenderSettingsGuard.applyForMap(minecraft);
@@ -115,10 +121,13 @@ public class MapScreen extends Screen {
             return;
         }
 
+        // The world on screen was rendered with the camera as it was before this frame's input.
+        MapView renderedView = captureView();
         updateSmoothControls();
         VoxyBridge.suppressEnvironmentalFogForMap();
         MapRenderSettingsGuard.applyForMap(minecraft);
         syncWorldCamera();
+        drawPlayerMarker(g, renderedView, delta);
         drawWorldViewerOverlay(g, mouseX, mouseY);
         drawOpeningAnimation(g);
         if (xaeroTransitionActive) {
@@ -149,11 +158,10 @@ public class MapScreen extends Screen {
         double dt = lastFrameNanos == 0L ? 1.0 / 60.0 : Math.min(0.08, (now - lastFrameNanos) / 1_000_000_000.0);
         lastFrameNanos = now;
 
-        long window = minecraft.getWindow().handle();
-        double forwardInput = keyDown(window, GLFW.GLFW_KEY_W) || keyDown(window, GLFW.GLFW_KEY_UP) ? 1.0 : 0.0;
-        forwardInput -= keyDown(window, GLFW.GLFW_KEY_S) || keyDown(window, GLFW.GLFW_KEY_DOWN) ? 1.0 : 0.0;
-        double strafeInput = keyDown(window, GLFW.GLFW_KEY_A) || keyDown(window, GLFW.GLFW_KEY_LEFT) ? 1.0 : 0.0;
-        strafeInput -= keyDown(window, GLFW.GLFW_KEY_D) || keyDown(window, GLFW.GLFW_KEY_RIGHT) ? 1.0 : 0.0;
+        double forwardInput = keyDown(InputConstants.KEY_W) || keyDown(InputConstants.KEY_UP) ? 1.0 : 0.0;
+        forwardInput -= keyDown(InputConstants.KEY_S) || keyDown(InputConstants.KEY_DOWN) ? 1.0 : 0.0;
+        double strafeInput = keyDown(InputConstants.KEY_A) || keyDown(InputConstants.KEY_LEFT) ? 1.0 : 0.0;
+        strafeInput -= keyDown(InputConstants.KEY_D) || keyDown(InputConstants.KEY_RIGHT) ? 1.0 : 0.0;
 
         double horizontalInput = Math.hypot(forwardInput, strafeInput);
         if (horizontalInput > 1.0) {
@@ -161,7 +169,7 @@ public class MapScreen extends Screen {
             strafeInput /= horizontalInput;
         }
 
-        double speedBoost = keyDown(window, GLFW.GLFW_KEY_LEFT_SHIFT) || keyDown(window, GLFW.GLFW_KEY_RIGHT_SHIFT) ? 2.5 : 1.0;
+        double speedBoost = keyDown(InputConstants.KEY_LSHIFT) || keyDown(InputConstants.KEY_RSHIFT) ? 2.5 : 1.0;
         double moveSpeed = Math.max(12.0, blocksPerPixel * 76.0) * speedBoost * VoxyMapSettings.cameraSpeedMultiplier();
         moveSpeed = Math.min(moveSpeed, MAX_KEYBOARD_CAMERA_SPEED * speedBoost);
         double forwardX = -Math.sin(viewYaw);
@@ -181,56 +189,77 @@ public class MapScreen extends Screen {
         }
     }
 
-    private static boolean keyDown(long window, int key) {
-        return GLFW.glfwGetKey(window, key) == GLFW.GLFW_PRESS;
+    private static boolean keyDown(int scancode) {
+        return InputConstants.isKeyDown(scancode);
     }
 
-    private GroundPoint mapPointAt(double mouseX, double mouseY) {
-        if (width <= 0 || height <= 0 || !VoxyMapCameraController.isActive()) {
-            return null;
-        }
-
-        double cameraX = VoxyMapCameraController.cameraX();
-        double cameraY = VoxyMapCameraController.cameraY();
-        double cameraZ = VoxyMapCameraController.cameraZ();
-        double pitch = Math.toRadians(VoxyMapCameraController.cameraPitch());
-        double planeY = viewCenterY;
-
-        double forwardX = -Math.sin(viewYaw) * Math.cos(pitch);
-        double forwardY = -Math.sin(pitch);
-        double forwardZ = Math.cos(viewYaw) * Math.cos(pitch);
-        double rightX = Math.cos(viewYaw);
-        double rightZ = Math.sin(viewYaw);
-        double upX = Math.sin(viewYaw) * Math.sin(pitch);
-        double upY = Math.cos(pitch);
-        double upZ = -Math.cos(viewYaw) * Math.sin(pitch);
-
-        double tanY = Math.tan(Math.toRadians(VoxyMapCameraController.fov()) * 0.5);
-        double tanX = tanY * width / (double) height;
-        double ndcX = 1.0 - mouseX / width * 2.0;
-        double ndcY = 1.0 - mouseY / height * 2.0;
-        double rayX = forwardX + rightX * ndcX * tanX + upX * ndcY * tanY;
-        double rayY = forwardY + upY * ndcY * tanY;
-        double rayZ = forwardZ + rightZ * ndcX * tanX + upZ * ndcY * tanY;
-
-        if (Math.abs(rayY) < 1.0E-6) {
-            return null;
-        }
-
-        double t = (planeY - cameraY) / rayY;
-        if (t <= 0.0 || !Double.isFinite(t)) {
-            return null;
-        }
-        return new GroundPoint(cameraX + rayX * t, cameraZ + rayZ * t);
+    private MapView.GroundPoint mapPointAt(double mouseX, double mouseY) {
+        MapView view = captureView();
+        return view == null ? null : view.groundPointAt(mouseX, mouseY, viewCenterY);
     }
 
-    private void keepMapPointUnderMouse(GroundPoint anchor, double mouseX, double mouseY) {
-        GroundPoint current = mapPointAt(mouseX, mouseY);
+    private MapView captureView() {
+        var window = minecraft.getWindow();
+        double aspectRatio = window.getHeight() > 0 ? window.getWidth() / (double) window.getHeight() : 1.0;
+        return MapView.capture(width, height, aspectRatio);
+    }
+
+    private void keepMapPointUnderMouse(MapView.GroundPoint anchor, double mouseX, double mouseY) {
+        MapView.GroundPoint current = mapPointAt(mouseX, mouseY);
         if (anchor == null || current == null) {
             return;
         }
-        viewCenterX += anchor.x - current.x;
-        viewCenterZ += anchor.z - current.z;
+        viewCenterX += anchor.x() - current.x();
+        viewCenterZ += anchor.z() - current.z();
+    }
+
+    /**
+     * Puts the map focus on the ground under the player. The camera aims at a point on the
+     * ground; aiming at a fixed height far above the terrain pushed what is on screen away
+     * from the player and left the top of a zoomed-in map empty.
+     */
+    private void moveFocusToPlayer() {
+        LocalPlayer player = minecraft.player;
+        if (player == null) {
+            return;
+        }
+        viewCenterX = player.getX();
+        viewCenterY = groundHeightAt(player.getX(), player.getZ(), player.getY());
+        viewCenterZ = player.getZ();
+    }
+
+    private void centerOnPlayer() {
+        moveFocusToPlayer();
+        moveVelocityX = 0.0;
+        moveVelocityZ = 0.0;
+        syncWorldCamera();
+    }
+
+    /** The top of the terrain at a column, or {@code fallback} when that column is not loaded. */
+    private double groundHeightAt(double x, double z, double fallback) {
+        ClientLevel level = minecraft.level;
+        int blockX = Mth.floor(x);
+        int blockZ = Mth.floor(z);
+        if (level == null || !level.hasChunk(SectionPos.blockToSectionCoord(blockX), SectionPos.blockToSectionCoord(blockZ))) {
+            return fallback;
+        }
+        int height = level.getHeight(Heightmap.Types.MOTION_BLOCKING, blockX, blockZ);
+        return height > level.getMinY() ? height : fallback;
+    }
+
+    private void drawPlayerMarker(GuiGraphicsExtractor g, MapView view, float partialTick) {
+        LocalPlayer player = minecraft.player;
+        if (player == null) {
+            return;
+        }
+        Vec3 position = player.getPosition(partialTick);
+        double groundY = groundHeightAt(position.x, position.z, position.y);
+        // Keep the off-screen marker clear of the info panel (42 tall with a player) and the key hints.
+        int safeTop = HUD_MARGIN + 42 + HUD_GAP + 14;
+        int safeBottom = height - HUD_MARGIN - KEY_HINT_HEIGHT - HUD_GAP - 14;
+        playerMarker.draw(g, minecraft, view, position.x, groundY, position.z, player.getViewYRot(partialTick),
+                viewCenterX, viewCenterY, viewCenterZ, Math.max(1.0, blocksPerPixel * 16.0),
+                HUD_MARGIN + 14, safeTop, width - HUD_MARGIN - 14, Math.max(safeTop, safeBottom));
     }
 
     private void panByPixels(double deltaX, double deltaY) {
@@ -263,6 +292,10 @@ public class MapScreen extends Screen {
     private void syncWorldCamera() {
         if (!isUnsupportedDimension()) {
             VoxyMapCameraController.update(minecraft, viewCenterX, viewCenterY, viewCenterZ, viewYaw, viewPitch, blocksPerPixel);
+            MapView view = captureView();
+            if (view != null) {
+                VoxyBridge.coverRenderDistanceForMap(view.groundReach(viewCenterY));
+            }
         } else {
             VoxyMapCameraController.deactivate();
         }
@@ -596,9 +629,9 @@ public class MapScreen extends Screen {
     }
 
     private void openXaeroWorldMap() {
+        restoreVoxySettings();
         VoxyMapGuiRenderer.close(minecraft);
         VoxyMapCameraController.deactivate();
-        VoxyBridge.restoreEnvironmentalFogAfterMap();
         MapRenderSettingsGuard.restoreAfterMap(minecraft);
 
         if (XaeroWorldMapBridge.openWorldMap(minecraft)) {
@@ -628,13 +661,13 @@ public class MapScreen extends Screen {
 
     private void zoomAt(double mouseX, double mouseY, double factor) {
         double oldBlocksPerPixel = blocksPerPixel;
-        double newBlocksPerPixel = Mth.clamp(oldBlocksPerPixel * factor, 0.125, 256.0);
+        double newBlocksPerPixel = Mth.clamp(oldBlocksPerPixel * factor, 0.125, VoxyMapCameraController.MAX_BLOCKS_PER_PIXEL);
         if (newBlocksPerPixel == oldBlocksPerPixel) {
             return;
         }
 
         syncWorldCamera();
-        GroundPoint anchor = mapPointAt(mouseX, mouseY);
+        MapView.GroundPoint anchor = mapPointAt(mouseX, mouseY);
         blocksPerPixel = newBlocksPerPixel;
         syncWorldCamera();
         keepMapPointUnderMouse(anchor, mouseX, mouseY);
@@ -643,14 +676,18 @@ public class MapScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean isInside) {
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_1 && handleSettingsClick(event.x(), event.y())) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && handleSettingsClick(event.x(), event.y())) {
             return true;
         }
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_1 && isInsideXaeroButton(event.x(), event.y())) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && isInsideXaeroButton(event.x(), event.y())) {
             startXaeroTransition();
             return true;
         }
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_1) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && playerMarker.edgeMarkerContains(event.x(), event.y())) {
+            centerOnPlayer();
+            return true;
+        }
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             dragging = true;
             middleDragging = false;
             dragLastMouseX = event.x();
@@ -659,7 +696,7 @@ public class MapScreen extends Screen {
             moveVelocityZ = 0.0;
             return true;
         }
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_MIDDLE) {
             middleDragging = true;
             dragging = false;
             dragStartMouseX = event.x();
@@ -671,11 +708,11 @@ public class MapScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_1) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             dragging = false;
             return true;
         }
-        if (event.button() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_MIDDLE) {
             middleDragging = false;
             return true;
         }
@@ -702,28 +739,25 @@ public class MapScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int keyCode = event.key();
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE || keyCode == GLFW.GLFW_KEY_M) {
+        if (keyCode == InputConstants.KEY_ESCAPE || keyCode == InputConstants.KEY_M) {
             onClose();
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_W || keyCode == GLFW.GLFW_KEY_S ||
-                keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_D ||
-                keyCode == GLFW.GLFW_KEY_UP || keyCode == GLFW.GLFW_KEY_DOWN ||
-                keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_RIGHT) {
+        if (keyCode == InputConstants.KEY_W || keyCode == InputConstants.KEY_S ||
+                keyCode == InputConstants.KEY_A || keyCode == InputConstants.KEY_D ||
+                keyCode == InputConstants.KEY_UP || keyCode == InputConstants.KEY_DOWN ||
+                keyCode == InputConstants.KEY_LEFT || keyCode == InputConstants.KEY_RIGHT) {
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_C && minecraft.player != null) {
-            viewCenterX = minecraft.player.getX();
-            viewCenterY = MAP_VIEW_LEVEL;
-            viewCenterZ = minecraft.player.getZ();
-            syncWorldCamera();
+        if (keyCode == InputConstants.KEY_C && minecraft.player != null) {
+            centerOnPlayer();
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_EQUAL || keyCode == GLFW.GLFW_KEY_KP_ADD) {
+        if (keyCode == InputConstants.KEY_EQUALS || keyCode == InputConstants.KEY_ADD) {
             zoomAt(lastZoomMouseX(), lastZoomMouseY(), 0.8);
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_MINUS || keyCode == GLFW.GLFW_KEY_KP_SUBTRACT) {
+        if (keyCode == InputConstants.KEY_MINUS || keyCode == SDLScancode.SDL_SCANCODE_KP_MINUS) {
             zoomAt(lastZoomMouseX(), lastZoomMouseY(), 1.25);
             return true;
         }
@@ -755,10 +789,16 @@ public class MapScreen extends Screen {
     }
 
     private void closeMapView() {
+        restoreVoxySettings();
         VoxyMapGuiRenderer.close(minecraft);
         VoxyMapCameraController.deactivate();
-        VoxyBridge.restoreEnvironmentalFogAfterMap();
         MapRenderSettingsGuard.restoreAfterMap(minecraft);
+    }
+
+    /** Before {@link VoxyMapGuiRenderer#close}: under Iris it rebuilds Voxy's renderer, which reads these settings. */
+    private static void restoreVoxySettings() {
+        VoxyBridge.restoreEnvironmentalFogAfterMap();
+        VoxyBridge.restoreRenderDistanceAfterMap();
     }
 
     @Override
@@ -774,8 +814,5 @@ public class MapScreen extends Screen {
     @Override
     public boolean isInGameUi() {
         return true;
-    }
-
-    private record GroundPoint(double x, double z) {
     }
 }

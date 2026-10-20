@@ -23,18 +23,19 @@ world render — fed by Voxy — becomes the map.
 | Fabric API | `0.162.0+26.3` |
 | Loom | `1.18.3` (plugin id `net.fabricmc.fabric-loom`) |
 | Gradle | `9.8.1` (Loom 1.18 needs ≥ 9.7 running on Java 25) |
-| Voxy | `0.2.20-beta`, `263` branch (compile-only, local jar — see below) |
+| Voxy | `0.2.20-beta` (compile-only, Modrinth or local jar — see below) |
 | Iris | `1.11.7+26.3-fabric` (compile-only) |
 | Xaero's World Map | `1.47.0` (compile-only) |
 
 All versions live in `gradle.properties`; `build.gradle` reads them from there. Bump
 them in one place.
 
-Voxy for 26.3 is not on Modrinth yet. If any `libs/voxy-*.jar` exists it is used instead
-of `maven.modrinth:voxy:${voxy_version}`; drop a build of Voxy's
-[`263` branch](https://github.com/MCRcortex/voxy/tree/263) there. `*.jar` is git-ignored
-and Voxy is All-Rights-Reserved, so the jar is never committed. Once Voxy publishes a
-26.3 build, delete `libs/` and the Modrinth artifact is picked up again.
+Voxy comes from Modrinth (`maven.modrinth:voxy:${voxy_version}`). If any
+`libs/voxy-*.jar` exists it is used instead: when porting to a Minecraft version Voxy has
+not published for yet, drop a build of the matching [Voxy](https://github.com/MCRcortex/voxy)
+branch there. `*.jar` is git-ignored and Voxy is All-Rights-Reserved, so the jar is never
+committed. Once Voxy publishes that build, delete `libs/` and the Modrinth artifact is
+picked up again.
 
 ```shell
 ./gradlew build          # produces build/libs/VoxyMap-<version>.jar
@@ -147,7 +148,7 @@ Minecraft 26.2:
 - **The depth buffer is reversed**: clear depth to `0.0`, not `1.0`. Vanilla clears via
   `RenderSystem.getDevice().createCommandEncoder().clearColorAndDepthTextures(...)`.
 
-Voxy 0.2.20-beta (`263` branch) specifics:
+Voxy 0.2.20-beta (26.3) specifics:
 
 - `VoxyConfig.useEnvironmentalFog` is gone; it is `getFogMode()` / `setFogMode(...)` with
   `NormalRenderPipeline.FogMode` (`FOG_AND_FADE`, `FOG`, `FADE`, `OFF`). `OFF` is the old
